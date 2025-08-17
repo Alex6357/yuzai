@@ -1,0 +1,20 @@
+node_modules
+
+# 编辑器相关
+.idea
+
+# 用户可能修改的目录
+/adapters/**
+/plugins/**
+
+# 日志目录和数据目录
+/logs
+/data
+
+# 用于参考的旧项目文件夹
+_old
+
+# 配置文件目录
+/config/**
+!/config/defaults
+!/config/defaults/**

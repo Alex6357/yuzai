@@ -1,0 +1,83 @@
+# 插件加载超时
+pluginLoadTimeout = 60
+# 监听文件变化
+fileWatch = true
+# 上线推送通知的冷却时间
+onlineMsgExp = 1440
+# 文件保存时间
+fileToUrlTime = 1
+# 文件访问次数
+fileToUrlTimes = -1
+# 消息类型统计
+msgTypeCount = false
+# 以/开头转为#
+slashToHash = true
+# 米游社接口代理地址，国际服用
+# proxyAddress:
+
+[schedule]
+# 自动更新时间
+updateTime = 1440
+# 自动重启时间
+restartTime = 0
+# 定时更新cron表达式
+updateCron = ""
+# 定时重启cron表达式
+restartCron = ""
+# 定时关机cron表达式
+stopCron = ""
+# 定时开机cron表达式
+startCron = ""
+
+[log]
+# 日志等级 trace,debug,info,warn,fatal,mark,error,off
+level = "info"
+# 单条日志长度
+length = 10000
+# 对象日志格式
+object = true
+# 日志ID对齐
+align = "  Yuzai  "
+
+[puppeteer]
+# chromium其他路径
+chromiumPath = ""
+# puppeteer接口地址
+puppeteerWs = ""
+# puppeteer截图超时时间
+puppeteerTimeout = -1
+
+[redis]
+# Redis 命令路径
+path = "redis-server"
+# Redis 地址
+host = "127.0.0.1"
+# Redis 端口
+port = 6379
+# Redis 用户名
+username = ""
+# Redis 密码
+password = ""
+# Redis 数据库
+db = 0
+
+[server]
+# 服务器地址
+url = "http://localhost:2536"
+# 服务器端口
+port = 2536
+# 服务器缺省跳转地址
+redirect = "https://github.com/Alex6357/yuzai"
+# 服务器鉴权
+auth = ""
+# Authorization: Bearer <access_token>
+[server.https]
+# 是否启用 https 服务器
+enabled = false
+# https 服务器地址
+url = "https://localhost:2537"
+# https 服务器端口
+port = 2537
+# https 服务器证书
+key = "config/localhost.key"
+cert = "config/localhost.crt"
