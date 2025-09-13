@@ -7,7 +7,13 @@ import Adapter from "./adapter.ts";
 import logger from "./logger.ts";
 import Plugin from "./plugin.ts";
 import Message, { MessageBuilder } from "./message.ts";
-import { MessageEvent, ConnectEvent, NoticeEvent, type NoticeEventIDs } from "./event.ts";
+import {
+  MessageEvent,
+  ConnectEvent,
+  NoticeEvent,
+  type NoticeEventIDs,
+  type NoticeEventData,
+} from "./event.ts";
 import { PlatformInfo } from "./types.ts";
 import type { InfoGroup, InfoGuild, InfoUserGroup, InfoUserPersonal, Target } from "./types.ts";
 
@@ -877,8 +883,12 @@ class Bot extends EventEmitter {
    * 如果有插件返回 true，则不会继续发送给其他插件
    * @param event 事件对象
    */
-  async onNotice(type: NoticeEventIDs, data: Record<string, unknown>) {
-    const noticeEvent = new NoticeEvent(this, type, data);
+  async onNotice<T extends NoticeEventIDs | string>(
+    type: T,
+    data: NoticeEventData<T>,
+    platformInfo?: PlatformInfo,
+  ) {
+    const noticeEvent = new NoticeEvent(this, type, data, platformInfo);
     for (const plugin of this.pluginList) {
       if (await plugin.onNotice(noticeEvent)) {
         return;

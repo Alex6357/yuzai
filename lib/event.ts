@@ -96,13 +96,13 @@ class MessageEvent extends BaseEvent {
   }
 }
 
-class NoticeEvent extends BaseEvent {
-  protected _type: NoticeEventIDs;
+class NoticeEvent<NoticeEventID extends NoticeEventIDs | string> extends BaseEvent {
+  protected _type: NoticeEventID;
   get type() {
     return this._type;
   }
 
-  protected _data: Record<string, unknown>;
+  protected _data: NoticeEventData<NoticeEventID>;
   get data() {
     return this._data;
   }
@@ -114,8 +114,8 @@ class NoticeEvent extends BaseEvent {
 
   constructor(
     bot: Bot,
-    noticeType: NoticeEventIDs,
-    data: Record<string, unknown>,
+    noticeType: NoticeEventID,
+    data: NoticeEventData<NoticeEventID>,
     platformInfo?: PlatformInfo,
   ) {
     super(bot);
@@ -127,34 +127,52 @@ class NoticeEvent extends BaseEvent {
   }
 }
 
-type Event = BaseEvent | ConnectEvent | MessageEvent | NoticeEvent;
+interface FriendRequestData {
+  timestamp: number;
+  requesterID: string;
+  message: string;
+}
+
+interface GroupRequestData {
+  timestamp: number;
+  requesterID: string;
+  message: string;
+  groupID: string;
+}
+
+interface NoticeEventDataMap {
+  "notice.friend.request": FriendRequestData;
+  "notice.group.request": GroupRequestData;
+}
+
+type NoticeEventData<T extends NoticeEventIDs | string> = T extends keyof NoticeEventDataMap
+  ? NoticeEventDataMap[T]
+  : Record<string, unknown>;
+
+type Event = BaseEvent | ConnectEvent | MessageEvent | NoticeEvent<NoticeEventIDs>;
 
 type MessageEventIDs = "message" | "message.private" | "message.group" | "message.guild";
 
-type NoticeEventIDs =
-  | "notice"
-  | "notice.friend"
-  | "notice.friend.request"
-  | "notice.friend.accept"
-  | "notice.friend.reject"
-  | "notice.group"
-  | "notice.group.increase"
-  | "notice.group.decrease"
-  | "notice.group.admin"
-  | "notice.group.notice"
-  | "notice.group.upload"
-  | "notice.group.member.card"
-  | "notice.group.member.permission"
-  | "notice.group.member.mute"
-  | "notice.guild.member.join"
-  | "notice.guild.member.leave"
-  | "notice.guild.member.mute"
-  | "notice.guild.member.unmute"
-  | "notice.guild.member.role"
-  | "notice.guild.bot.join"
-  | "notice.guild.bot.leave";
+type NoticeEventIDs = "notice.friend.request" | "notice.group.request";
+// | "notice.friend.accept"
+// | "notice.friend.reject"
+// | "notice.group.increase"
+// | "notice.group.decrease"
+// | "notice.group.admin"
+// | "notice.group.notice"
+// | "notice.group.upload"
+// | "notice.group.member.card"
+// | "notice.group.member.permission"
+// | "notice.group.member.mute"
+// | "notice.guild.member.join"
+// | "notice.guild.member.leave"
+// | "notice.guild.member.mute"
+// | "notice.guild.member.unmute"
+// | "notice.guild.member.role"
+// | "notice.guild.bot.join"
+// | "notice.guild.bot.leave";
 
 type EventIDs = "connect" | "schedule" | MessageEventIDs | NoticeEventIDs;
 
 export { BaseEvent, ConnectEvent, MessageEvent, NoticeEvent };
-export type { Event, EventIDs, MessageEventIDs, NoticeEventIDs };
+export type { Event, EventIDs, MessageEventIDs, NoticeEventIDs, NoticeEventData };
