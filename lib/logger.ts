@@ -34,7 +34,6 @@ log4js.configure({
         type: "pattern",
         pattern: "[%d{hh:mm:ss.SSS}][%4.4p]%m",
         tokens: {
-          // eslint-disable-next-line no-control-regex -- 写入到文件需要移除控制字符
           message: (logEvent) => logEvent.data[0].replace(/\x1B\[\d+m/g, ""),
         },
       },
@@ -47,7 +46,6 @@ log4js.configure({
         type: "pattern",
         pattern: "[%d{hh:mm:ss.SSS}][%4.4p]%m",
         tokens: {
-          // eslint-disable-next-line no-control-regex -- 写入到文件需要移除控制字符
           message: (logEvent) => logEvent.data[0].replace(/\x1B\[\d+m/g, ""),
         },
       },
