@@ -70,8 +70,8 @@ class WS {
   /** http 服务器 */
   protected readonly httpServer: http.Server = http
     .createServer(this.expressApp)
-    .on("error", this.serverErrorHandler)
-    .on("upgrade", this.wsConnect);
+    .on("error", this.serverErrorHandler.bind(this))
+    .on("upgrade", this.wsConnect.bind(this));
 
   /** https 服务器 */
   protected _httpsServer?: http.Server;
@@ -166,7 +166,9 @@ class WS {
     const server = serverType === "https" ? this.httpsServer : this.httpServer;
     if (!server) return;
     // 启动服务器并监听指定端口
-    server.listen(serverType ? config.system.server.https.port : config.system.server.port);
+    server.listen(
+      serverType === "https" ? config.system.server.https.port : config.system.server.port,
+    );
     try {
       // 等待服务器监听事件或错误事件
       await new Promise<void>((resolve, reject) => {
@@ -412,6 +414,13 @@ class WS {
       return socket.destroy();
     }
     this.wss.handleUpgrade(req, socket, head, (ws) => {
+      Object.assign(ws, {
+        sendMessage: (message: object) => {
+          const rawMessage = JSON.stringify(message);
+          logger.debug(["消息", message], `${req.serverID} => ${req.remoteID}`, true);
+          return ws.send(rawMessage);
+        },
+      });
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- 必然存在
       this.wsHandlers.get(path)!.wsHandler = this.wsHandlers
         .get(path)
@@ -424,13 +433,6 @@ class WS {
         this.wsHandlers
           .get(path)
           ?.wsHandler?.(message, ws as WebSocket & { sendMessage: (data: object) => void });
-      });
-      Object.assign(ws, {
-        sendMessage: (message: object) => {
-          const rawMessage = JSON.stringify(message);
-          logger.debug(["消息", message], `${req.serverID} => ${req.remoteID}`, true);
-          return ws.send(rawMessage);
-        },
       });
     });
   }

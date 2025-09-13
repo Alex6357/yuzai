@@ -7,6 +7,7 @@ import logger from "../lib/logger.ts";
 import Adapter from "../lib/adapter.ts";
 import Message, { MessageBuilder } from "../lib/message.ts";
 import type { InfoUserPersonal } from "../lib/types.ts";
+import client from "../lib/client.ts";
 
 class StdioAdapter extends Adapter {
   readonly id = "stdio";
@@ -52,7 +53,7 @@ class StdioAdapter extends Adapter {
         logger.info(`系统消息: ${message.rawMessage}`, this.id);
         this.bot?.onMessage(message);
       })
-      .on("close", () => process.exit(1));
+      .on("close", () => client.gracefulExit());
   }
 
   /**
@@ -87,7 +88,7 @@ class StdioAdapter extends Adapter {
     return new Map<string, InfoUserPersonal>().set(this.id, {
       type: "person",
       userID: this.id,
-      nickname: this.name,
+      userName: this.name,
       remark: this.name,
     });
   }
@@ -97,7 +98,7 @@ class StdioAdapter extends Adapter {
       return {
         type: "person",
         userID: this.id,
-        nickname: this.name,
+        userName: this.name,
         remark: this.name,
       };
     return undefined;

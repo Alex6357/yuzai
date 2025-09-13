@@ -1421,6 +1421,44 @@ export type GoCqhttpEvent =
   | Onebot11RequestEvent
   | GoCqhttpMessageSentEvent;
 
+export interface LagrangeMessageEvent {
+  /** 事件发生的时间戳 */
+  time: number;
+  /** 收到事件的机器人 QQ 号 */
+  self_id: number;
+  /** 上报类型 */
+  post_type: "message";
+  /** 消息类型 */
+  message_type: "private";
+  /** 消息子类型，如果是好友则是 friend，如果是群临时会话则是 group */
+  sub_type: "friend" | "group" | "other";
+  /** 消息 ID */
+  message_id: number;
+  /** 发送者 QQ 号 */
+  user_id: number;
+  /** 消息内容 */
+  message: Onebot11Message;
+  /** 原始消息内容 */
+  raw_message: string;
+  /** 字体 */
+  font: number;
+  /**
+   * 私聊发送者信息
+   *
+   * 需要注意的是，`sender` 中的各字段是尽最大努力提供的，也就是说，不保证每个字段都一定存在，也不保证存在的字段都是完全正确的（缓存可能过期）。
+   */
+  sender: {
+    /** 发送者 QQ 号 */
+    user_id?: number;
+    /** 昵称 */
+    nickname?: string;
+    /** 性别，male 或 female 或 unknown */
+    sex?: "male" | "female" | "unknown";
+    /** 年龄 */
+    age?: number;
+  };
+}
+
 /** Onebot11 响应 */
 export interface Onebot11Response {
   status: "ok" | "async" | "failed";

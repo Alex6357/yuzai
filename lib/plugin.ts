@@ -14,7 +14,7 @@ type InteractionKey =
 abstract class Trigger<T> {
   readonly name: string;
   readonly description: string;
-  readonly events: Set<EventIDs> = new Set<EventIDs>();
+  readonly events: Set<EventIDs | string> = new Set<EventIDs | string>();
 
   protected _priority = 0;
   get priority() {
@@ -156,8 +156,11 @@ class ConnectTrigger extends Trigger<ConnectEvent> {
   }
 }
 
-class NoticeTrigger extends Trigger<NoticeEvent> {
-  readonly events: Set<NoticeEventIDs> = new Set<NoticeEventIDs>();
+// TODO 这里有可能不对
+class NoticeTrigger<NoticeEventID extends NoticeEventIDs | string> extends Trigger<
+  NoticeEvent<NoticeEventID>
+> {
+  readonly events: Set<NoticeEventIDs | string> = new Set<NoticeEventIDs | string>();
 
   constructor({
     name,
@@ -168,20 +171,20 @@ class NoticeTrigger extends Trigger<NoticeEvent> {
   }: {
     name: string;
     description: string;
-    event?: NoticeEventIDs;
-    events?: NoticeEventIDs[];
-    handler: (event: NoticeEvent) => Promise<void>;
+    event?: NoticeEventID;
+    events?: NoticeEventID[];
+    handler: (event: NoticeEvent<NoticeEventID>) => Promise<void>;
   }) {
     super({ name, description, handler });
     if (event) this.events.add(event);
     if (events) events.forEach((e) => this.events.add(e));
   }
 
-  private filterType(event: NoticeEvent): boolean {
+  private filterType(event: NoticeEvent<NoticeEventID>): boolean {
     return this.events.has("notice") || this.events.has(event.type);
   }
 
-  async handle(event: NoticeEvent): Promise<boolean> {
+  async handle(event: NoticeEvent<NoticeEventID>): Promise<boolean> {
     if (!this.filterType(event)) return false;
     if (this._wait) {
       await this.handler(event);
@@ -251,7 +254,7 @@ class Plugin extends EventEmitter {
     return this._connectTriggers;
   }
 
-  protected _noticeTriggers: NoticeTrigger[] = [];
+  protected _noticeTriggers: NoticeTrigger<NoticeEventIDs | string>[] = [];
   get noticeTriggers() {
     return this._noticeTriggers;
   }
@@ -316,7 +319,7 @@ class Plugin extends EventEmitter {
     }
   }
 
-  async onNotice(event: NoticeEvent) {
+  async onNotice<NoticeEventID extends NoticeEventIDs | string>(event: NoticeEvent<NoticeEventID>) {
     this._noticeTriggers.sort((a, b) => b.priority - a.priority);
     for (const trigger of this._noticeTriggers) {
       if (await trigger.handle(event)) return true;
@@ -419,7 +422,29 @@ class Plugin extends EventEmitter {
     handler: () => Promise<void>;
   }): this;
 
-  addTrigger({
+  /**
+   * 添加 Bot 事件触发器
+   * @param name 触发器名称
+   * @param description 触发器描述
+   * @param event 触发器事件名称
+   * @param events 触发器事件名称列表
+   * @param handler 触发器处理函数
+   */
+  addTrigger<NoticeEventID extends NoticeEventIDs | string>({
+    name,
+    description,
+    event,
+    events,
+    handler,
+  }: {
+    name: string;
+    description: string;
+    event?: NoticeEventID;
+    events?: NoticeEventID[];
+    handler: (event: NoticeEvent<NoticeEventID>) => Promise<void>;
+  }): this;
+
+  addTrigger<NoticeEventID extends NoticeEventIDs | string>({
     name,
     description,
     event,
@@ -444,14 +469,14 @@ class Plugin extends EventEmitter {
     handler:
       | ((event: MessageEvent) => Promise<void>)
       | ((event: ConnectEvent) => Promise<void>)
-      | ((event: NoticeEvent) => Promise<void>)
+      | ((event: NoticeEvent<NoticeEventID>) => Promise<void>)
       | (() => Promise<void>);
     abort?: boolean;
     wait?: boolean;
     filter?:
       | ((event: MessageEvent) => boolean)
       | ((event: ConnectEvent) => boolean)
-      | ((event: NoticeEvent) => boolean);
+      | ((event: NoticeEvent<NoticeEventID>) => boolean);
   }) {
     if (cron) {
       try {
@@ -478,21 +503,51 @@ class Plugin extends EventEmitter {
       );
       return this;
     } else {
-      this._messageTriggers.push(
-        new MessageTrigger({
-          name,
-          description,
-          event: event as MessageEventIDs,
-          events: events as MessageEventIDs[],
-          command,
-          regex,
-          priority,
-          handler: handler as (event: MessageEvent) => Promise<void>,
-          abort,
-          wait,
-          filter: filter as (event: MessageEvent) => boolean,
-        }),
-      );
+      // 检查是否所有事件都是 MessageEventIDs
+      const allMessageEvents = (() => {
+        const eventList = [];
+        if (event) eventList.push(event);
+        if (events) eventList.push(...events);
+
+        // 如果没有指定事件，默认为 message
+        if (eventList.length === 0) return true;
+
+        return eventList.every(
+          (e) =>
+            e === "message" ||
+            e === "message.private" ||
+            e === "message.group" ||
+            e === "message.guild",
+        );
+      })();
+
+      if (allMessageEvents) {
+        this._messageTriggers.push(
+          new MessageTrigger({
+            name,
+            description,
+            event: event as MessageEventIDs,
+            events: events as MessageEventIDs[],
+            command,
+            regex,
+            priority,
+            handler: handler as (event: MessageEvent) => Promise<void>,
+            abort,
+            wait,
+            filter: filter as (event: MessageEvent) => boolean,
+          }),
+        );
+      } else {
+        this._noticeTriggers.push(
+          new NoticeTrigger({
+            name,
+            description,
+            event: event as NoticeEventIDs | string,
+            events: events as (NoticeEventIDs | string)[],
+            handler: handler as (event: NoticeEvent<NoticeEventIDs | string>) => Promise<void>,
+          }),
+        );
+      }
     }
     return this;
   }

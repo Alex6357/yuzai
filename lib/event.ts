@@ -2,7 +2,7 @@ import Bot from "./bot.ts";
 import logger from "./logger.ts";
 import Message, { MessageBuilder } from "./message.ts";
 import { PlatformInfo } from "./types.ts";
-import type { TargetGroup, TargetUser } from "./types.ts";
+import type { TargetGroup } from "./types.ts";
 
 abstract class BaseEvent {
   protected _bot: Bot;
@@ -48,6 +48,11 @@ class MessageEvent extends BaseEvent {
    * @param at 是否at用户
    */
   async reply(message: Message | string, quote = false, recallMsg = 0, at = false) {
+    if (!this.message.senderID) {
+      logger.error("消息用户 ID 为空，无法回复", this.bot.nickname);
+      return undefined;
+    }
+
     const messageBuilder = new MessageBuilder();
 
     if (typeof message === "string") {
@@ -62,9 +67,7 @@ class MessageEvent extends BaseEvent {
       else messageBuilder.addQuoteBlock(this.message.messageID);
     }
     if (at) {
-      if (!this.message.senderID)
-        logger.error("消息用户 ID 为空，at 功能无法使用", this.bot.nickname);
-      else messageBuilder.addAtBlock(this.message.senderID);
+      messageBuilder.addAtBlock(this.message.senderID);
     }
 
     message = messageBuilder.build();
@@ -78,10 +81,7 @@ class MessageEvent extends BaseEvent {
         );
         break;
       case "private":
-        messageID = await this.bot?.adapter?.sendPrivateMessage(
-          message,
-          (this.message.target as TargetUser).userID,
-        );
+        messageID = await this.bot?.adapter?.sendPrivateMessage(message, this.message.senderID);
     } // TODO 其他消息类型
 
     if (recallMsg > 0 && messageID) {

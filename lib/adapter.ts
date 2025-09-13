@@ -237,6 +237,51 @@ abstract class Adapter extends EventEmitter {
    * @returns 频道子频道列表，以子频道 ID 为键，子频道信息为值
    */
   getChannelList?(guildID: string): Promise<Map<string, InfoChannel> | undefined>;
+
+  /**
+   * 获取频道消息记录
+   * @param guildID - 要获取消息记录的频道 ID
+   * @param channelID - 要获取消息记录的子频道 ID
+   * @param startMessageID - 起始消息 ID
+   * @param count - 要获取的消息数量，默认为 20
+   * @returns 消息记录数组，失败返回 undefined
+   */
+  async getGuildMessageHistoryWrapper(
+    guildID: string,
+    channelID: string,
+    startMessageID: string,
+    count = 20,
+  ): Promise<Message[] | undefined> {
+    return this.getGuildMessageHistory?.(guildID, channelID, startMessageID, count);
+  }
+
+  /**
+   * 获取频道消息记录
+   * @param guildID - 要获取消息记录的频道 ID
+   * @param channelID - 要获取消息记录的频道 ID
+   * @param startMessageID - 起始消息 ID
+   * @param count - 要获取的消息数量，默认为 20
+   * @returns 消息记录数组，失败返回 undefined
+   */
+  getGuildMessageHistory?(
+    guildID: string,
+    channelID: string,
+    startMessageID: string,
+    count: number,
+  ): Promise<Message[] | undefined>;
+
+  /**
+   * 发送频道消息
+   * @param message - 要发送的消息
+   * @param guildID - 要发送的频道 ID
+   * @param channelID - 要发送的频道 ID
+   * @returns 发送成功后返回消息 ID，否则返回 undefined
+   */
+  sendGuildMessage?(
+    message: Message,
+    guildID: string,
+    channelID: string,
+  ): Promise<string | undefined>;
 }
 
 export default Adapter;

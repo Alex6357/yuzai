@@ -62,8 +62,7 @@ class Client extends EventEmitter {
     // 记录启动时间
     this._startTime = Date.now();
     // 监听 SIGHUP 和 SIGTERM 信号，退出进程
-    for (const i of ["SIGHUP", "SIGTERM"])
-      process.on(i, (_signal, code) => client.gracefulExit(code));
+    for (const i of ["SIGHUP", "SIGTERM"]) process.on(i, () => client.gracefulExit());
 
     // 捕获未处理的错误
     for (const i of ["uncaughtException", "unhandledRejection"]) {

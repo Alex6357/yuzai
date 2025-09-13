@@ -7,7 +7,7 @@ import os from "node:os";
 import { PlatformInfo, type Target } from "./types.ts";
 import logger from "./logger.ts";
 
-export abstract class MessageBlock {
+abstract class BaseMessageBlock {
   // TODO 确定 TYPE 范围
   abstract readonly type: "text" | "face" | "image" | "file" | "at" | "atall" | "quote";
   abstract toString(): string;
@@ -19,7 +19,7 @@ export abstract class MessageBlock {
 }
 
 /** 消息中的文本块 */
-export class TextBlock extends MessageBlock {
+export class TextBlock extends BaseMessageBlock {
   readonly type = "text";
   private readonly _text: string;
 
@@ -38,7 +38,7 @@ export class TextBlock extends MessageBlock {
 }
 
 /** 消息中的表情块 */
-export class FaceBlock extends MessageBlock {
+export class FaceBlock extends BaseMessageBlock {
   readonly type = "face";
   private readonly _faceID: string;
   get faceID() {
@@ -61,7 +61,7 @@ export class FaceBlock extends MessageBlock {
 }
 
 /** 消息中的图片块 */
-export class ImageBlock extends MessageBlock {
+export class ImageBlock extends BaseMessageBlock {
   readonly type = "image";
   private readonly _id: string;
   get id() {
@@ -98,7 +98,7 @@ export class ImageBlock extends MessageBlock {
  * 在机器人端，收到的文件块必然是一个 URL，发送的文件块大概率是一个文件路径
  * 在适配器端，需要发送的文件大概率是机器人端的文件路径，也可能是 URL
  */
-export class FileBlock extends MessageBlock {
+export class FileBlock extends BaseMessageBlock {
   readonly type = "file";
   private readonly _id?: string;
   get id() {
@@ -223,7 +223,7 @@ export class FileBlock extends MessageBlock {
 }
 
 /** 消息中的 @ 块 */
-export class AtBlock extends MessageBlock {
+export class AtBlock extends BaseMessageBlock {
   readonly type = "at";
   private readonly _targetUserID: string;
   get targetUserID() {
@@ -250,7 +250,7 @@ export class AtBlock extends MessageBlock {
 }
 
 /** 消息中的 \@全体成员 块 */
-export class AtallBlock extends MessageBlock {
+export class AtallBlock extends BaseMessageBlock {
   readonly type = "atall";
 
   toString(): string {
@@ -265,7 +265,7 @@ export class AtallBlock extends MessageBlock {
  * - 以第一个出现的引用块为准，同时在消息正文中忽略所有的引用块
  * - 以文本方式构造类似引用的格式，把引用内容以文本块的形式添加到消息中
  */
-export class QuoteBlock extends MessageBlock {
+export class QuoteBlock extends BaseMessageBlock {
   readonly type = "quote";
   private readonly _messageID?: string;
   get messageID() {
@@ -291,6 +291,15 @@ export class QuoteBlock extends MessageBlock {
     return `<quote: ${this._messageID || this._message}>`;
   }
 }
+
+export type MessageBlock =
+  | TextBlock
+  | FaceBlock
+  | ImageBlock
+  | FileBlock
+  | AtBlock
+  | AtallBlock
+  | QuoteBlock;
 
 /** 构造消息需要的参数 */
 interface MessageConstructor {

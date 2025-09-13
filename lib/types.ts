@@ -101,30 +101,30 @@ export type Target = TargetUser | TargetGroup | TargetGuild;
 export interface InfoUserPersonal extends TypeWithPlatform {
   readonly type: "person";
   readonly userID: string;
-  readonly nickname?: string;
+  readonly userName?: string;
   readonly remark?: string;
   readonly age?: number;
   readonly sex?: "male" | "female" | "secret";
-  readonly area?: string;
+  // readonly area?: string;
 }
 
 /** 群成员信息 */
 export interface InfoUserGroup extends TypeWithPlatform {
   readonly type: "group";
   readonly userID: string;
+  readonly userName?: string;
   readonly nickname?: string;
-  readonly card?: string;
   readonly sex?: "male" | "female" | "secret";
   readonly age?: number;
-  readonly area?: string;
-  readonly joinTime?: number;
-  readonly lastSentTime?: number;
-  readonly level?: string;
-  readonly role?: "owner" | "admin" | "member";
-  readonly unfriendly?: boolean;
-  readonly title?: string;
-  readonly titleExpireTime?: number;
-  readonly cardChangeable?: boolean;
+  // readonly area?: string;
+  // readonly joinTime?: number;
+  // readonly lastSentTime?: number;
+  // readonly level?: string;
+  // readonly role?: "owner" | "admin" | "member";
+  // readonly unfriendly?: boolean;
+  // readonly title?: string;
+  // readonly titleExpireTime?: number;
+  // readonly cardChangeable?: boolean;
 }
 
 /** 频道成员信息 */
@@ -132,7 +132,7 @@ export interface InfoUserGuild extends TypeWithPlatform {
   readonly type: "guild";
   readonly userID: string;
   readonly nickname?: string;
-  readonly card?: string;
+  // readonly card?: string;
   readonly sex?: "male" | "female" | "secret";
 }
 
@@ -145,15 +145,16 @@ export interface InfoGroup extends TypeWithPlatform {
   readonly groupName: string;
   readonly members: Map<string, InfoUserGroup>;
   readonly memberCount: number;
-  readonly maxMemberCount: number;
+  readonly remark?: string;
+  readonly maxMemberCount?: number;
 }
 
 /** 频道信息 */
 export interface InfoGuild extends TypeWithPlatform {
   readonly guildID: string;
   readonly guildName: string;
-  readonly guildDisplayID: string;
-  readonly members: Map<string, InfoUserGuild>;
+  // readonly guildDisplayID: string;
+  readonly members?: Map<string, InfoUserGuild>;
   readonly channels: Map<string, InfoChannel>;
 }
 

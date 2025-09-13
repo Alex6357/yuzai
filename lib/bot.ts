@@ -497,7 +497,7 @@ class Bot extends EventEmitter {
         const updatedGuildInfo = {
           ...existingGuildInfo,
           ...newGuildInfo,
-          members: existingGuildInfo.members,
+          members: existingGuildInfo.members ?? new Map(),
         };
         this.guildList.set(guildID, updatedGuildInfo);
       } else {
@@ -587,7 +587,7 @@ class Bot extends EventEmitter {
     await this.updateGuildList();
     const memberInfo = await this._adapter.getGuildMemberInfo(guildID, userID);
     if (memberInfo) {
-      this.guildList.get(guildID)?.members.set(userID, memberInfo);
+      this.guildList.get(guildID)?.members?.set(userID, memberInfo);
     }
   }
   /**
@@ -599,7 +599,7 @@ class Bot extends EventEmitter {
    */
   async getGuildMemberInfo(guildID: string, userID: string) {
     await this.updateGuildMemberInfo(guildID, userID);
-    return this.guildList.get(guildID)?.members.get(userID);
+    return this.guildList.get(guildID)?.members?.get(userID);
   }
   /**
    * 更新所有频道的子频道列表
@@ -837,12 +837,14 @@ class Bot extends EventEmitter {
   use(adapter: Adapter) {
     this._adapter = adapter;
     this.adapter.bind(this);
-    this.updateID();
-    this.updateNickname();
-    this.updateFriendList();
-    if (this.adapter.getGroupList) this.updateGroupList();
-    if (this.adapter.getGuildList) this.updateGuildList();
-    this.onConnect();
+    this.updateID().then(() => {
+      this.updateNickname();
+      this.updateFriendList();
+      if (this.adapter.getGroupList) this.updateGroupList();
+      if (this.adapter.getGuildList) this.updateGuildList();
+      this.onConnect();
+    });
+
     return this;
   }
 

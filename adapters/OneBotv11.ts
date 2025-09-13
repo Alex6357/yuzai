@@ -5,16 +5,24 @@ import WebSocket from "ws";
 import Adapter from "../lib/adapter.ts";
 import Message, {
   MessageBuilder,
-  MessageBlock,
   TextBlock,
   AtBlock,
   AtallBlock,
   FaceBlock,
+  type MessageBlock,
 } from "../lib/message.ts";
 import WS from "../lib/plugins/ws.ts";
 import logger from "../lib/logger.ts";
 import * as Onebot11 from "../lib/plugins/onebot_11_types.ts";
-import type { InfoGroup, InfoGuild } from "../lib/types.ts";
+import type {
+  InfoChannel,
+  InfoGroup,
+  InfoGuild,
+  InfoUserGroup,
+  InfoUserGuild,
+  InfoUserPersonal,
+} from "../lib/types.ts";
+import type Bot from "../lib/bot.ts";
 
 export default class OneBotv11Adapter extends Adapter {
   readonly id = "onebotv11";
@@ -166,7 +174,7 @@ export default class OneBotv11Adapter extends Adapter {
    * @param event 连接事件
    * @param ws WebSocket 实例
    */
-  connect(event: Onebot11.Onebot11LifecycleEvent, ws: WebSocket) {
+  connect(event: Onebot11.Onebot11LifecycleEvent, _ws: WebSocket) {
     if (event.sub_type === "connect") {
       this.bot?.onConnect();
     }
@@ -180,18 +188,20 @@ export default class OneBotv11Adapter extends Adapter {
     event:
       | Onebot11.Onebot11MessageEvent
       | Onebot11.GoCqhttpMessageEvent
-      | Onebot11.GoCqhttpMessageSentEvent,
+      | Onebot11.GoCqhttpMessageSentEvent
+      | Onebot11.LagrangeMessageEvent,
   ) {
     // 初始化一部分参数
     const messageBuilder = new MessageBuilder();
-    messageBuilder.botUUID = this.bot?.UUID!;
+    messageBuilder.botUUID = (this.bot as Bot).UUID;
     messageBuilder.senderID = event.user_id.toString();
     messageBuilder.messageID = event.message_id.toString();
     messageBuilder.sendTimestampMs = event.time;
 
     // 按类型处理 messageType 和 target
     switch (event.message_type) {
-      case "person": {
+      case "person":
+      case "private": {
         switch (event.sub_type) {
           case "friend":
             messageBuilder.messageType = "private";
@@ -212,11 +222,12 @@ export default class OneBotv11Adapter extends Adapter {
 
         messageBuilder.target = {
           type: "person",
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion,@typescript-eslint/no-non-null-asserted-optional-chain -- 按理说 bot 一定有 ID
           userID: this.bot?.id!,
         };
 
         const name =
-          event.sender.nickname || this.bot?.friendList.get(event.user_id.toString())?.nickname;
+          event.sender.nickname || this.bot?.friendList.get(event.user_id.toString())?.userName;
         logger.info(
           `好友消息：${name ? `[${name}] ` : ""}${event.raw_message}`,
           `${event.self_id} <= ${event.user_id}`,
@@ -234,10 +245,10 @@ export default class OneBotv11Adapter extends Adapter {
         // 匿名消息应添加到 platfrom 信息中
         switch (event.sub_type) {
           case "anonymous":
-            messageBuilder.platform.qq.isAnonymous = true;
+            (messageBuilder.platform.qq as { isAnonymous: boolean }).isAnonymous = true;
             break;
           case "normal":
-            messageBuilder.platform.qq.isAnonymous = false;
+            // messageBuilder.platform.qq.isAnonymous = false;
             break;
         }
 
@@ -249,7 +260,7 @@ export default class OneBotv11Adapter extends Adapter {
           const userInfo = this.bot?.groupList
             .get(event.group_id.toString())
             ?.members.get(event.user_id.toString());
-          if (userInfo) user_name = userInfo?.card || userInfo?.nickname;
+          if (userInfo) user_name = userInfo?.nickname || userInfo?.userName;
         }
 
         logger.info(
@@ -352,7 +363,7 @@ export default class OneBotv11Adapter extends Adapter {
           messageBuilder.addFileBlock(event.file.name, {
             id: event.file.id,
             size: event.file.size,
-            urlResolver: async (block) => {
+            urlResolver: async (_block) => {
               return (
                 await this.sendApi("get_group_file_url", {
                   group_id: event.group_id,
@@ -367,7 +378,7 @@ export default class OneBotv11Adapter extends Adapter {
             groupID: event.group_id.toString(),
           };
           messageBuilder.senderID = event.user_id.toString();
-          messageBuilder.botUUID = this.bot?.UUID!;
+          messageBuilder.botUUID = (this.bot as Bot).UUID;
           messageBuilder.messageID = event.file.id;
           this.bot?.onMessage(messageBuilder.build());
         }
@@ -455,7 +466,7 @@ export default class OneBotv11Adapter extends Adapter {
             userID: event.self_id.toString(),
           };
           messageBuilder.senderID = event.user_id.toString();
-          messageBuilder.botUUID = this.bot?.UUID!;
+          messageBuilder.botUUID = (this.bot as Bot).UUID;
           this.bot?.onMessage(messageBuilder.build());
         }
         break;
@@ -465,7 +476,9 @@ export default class OneBotv11Adapter extends Adapter {
           await this.getID(),
         );
         if (this.bot)
-          this.bot.platform.qq.clients = (await this.sendApi("get_online_clients"))?.data.clients;
+          (this.bot.platform.qq as { clients: unknown }).clients = (
+            await this.sendApi("get_online_clients")
+          )?.data.clients;
         break;
       case "essence":
         logger.info(
@@ -524,7 +537,11 @@ export default class OneBotv11Adapter extends Adapter {
           `${event.self_id} <= ${event.user_id}`,
           true,
         );
-        this.bot?.onNotice();
+        this.bot?.onNotice(
+          "notice.friend.request",
+          { timestamp: event.time, requesterID: event.user_id.toString(), message: event.comment },
+          { qq: { flag: event.flag } },
+        );
         break;
       case "group":
         logger.info(
@@ -532,9 +549,16 @@ export default class OneBotv11Adapter extends Adapter {
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
           true,
         );
-        event.approve = function (approve, reason) {
-          return this.bot.setGroupAddRequest(this.flag, approve, reason, this.sub_type);
-        };
+        this.bot?.onNotice(
+          "notice.group.request",
+          {
+            timestamp: event.time,
+            requesterID: event.user_id.toString(),
+            groupID: event.group_id.toString(),
+            message: event.comment,
+          },
+          { qq: { flag: event.flag, subType: event.sub_type } },
+        );
         break;
       default:
         logger.warn(`未知请求：${logger.magenta((event as any).raw)}`, (event as any).self_id);
@@ -555,7 +579,7 @@ export default class OneBotv11Adapter extends Adapter {
             else messageBlocks.push(new AtBlock(messageSegment.data.qq.toString()));
             break;
           case "face":
-            messageBlocks.push(new FaceBlock(messageSegment.data.id));
+            messageBlocks.push(new FaceBlock(messageSegment.data.id.toString()));
             break;
         }
       }
@@ -563,291 +587,7 @@ export default class OneBotv11Adapter extends Adapter {
     return messageBlocks;
   }
 
-  async getID() {
-    logger.debug("获取机器人 QQ 号", this.bot?.UUID);
-    return (await this.sendApi("get_login_info"))?.data.user_id as string;
-  }
-
-  async getNickname() {
-    logger.debug("获取机器人昵称", this.bot?.id);
-    return (await this.sendApi("get_login_info"))?.data.nickname as string;
-  }
-
-  async getFriendList() {
-    logger.debug("获取好友列表", this.bot?.id);
-    const response: { user_id: number; nickname: string; remark: string }[] = (
-      await this.sendApi("get_friend_list")
-    )?.data;
-    if (!response) {
-      return undefined;
-    }
-    const friends = new Map<string, UserPerson>();
-    response.map((i) => {
-      friends.set(i.user_id.toString(), {
-        type: "person",
-        userID: i.user_id.toString(),
-        nickname: i.nickname,
-        remark: i.remark,
-      });
-    });
-    return friends;
-  }
-
-  async getFriendInfo(userID: string): Promise<UserPerson | undefined> {
-    const response = (
-      await this.sendApi("get_stranger_info", {
-        user_id: userID,
-      })
-    )?.data;
-    if (!response) {
-      return undefined;
-    }
-    return {
-      type: "person",
-      userID: response.user_id,
-      nickname: response.nickname,
-      sex: response.sex,
-      age: response.age,
-    };
-  }
-
-  async getMessage(messageID: string) {
-    const response = (await this.sendApi("get_msg", { message_id: messageID }))?.data;
-    if (!response) {
-      return undefined;
-    }
-
-    const messageBuilder = new MessageBuilder();
-    messageBuilder.messageID = messageID;
-
-    if (response.group_id) {
-      messageBuilder.messageType = "group";
-      messageBuilder.target = {
-        type: "group",
-        groupID: response.group_id,
-      };
-      messageBuilder.sender = {
-        userID: response.user_id,
-      };
-    } else if (response.guild_id) {
-      messageBuilder.messageType = "guild";
-    } else {
-      messageBuilder.messageType = "private";
-    } // TODO 未完成
-
-    messageBuilder.sendTimestampMs = response.time;
-    const messageArray = this.makeMessageArray(response.message);
-    messageBuilder.messageBlocks = messageArray;
-    return messageBuilder.build();
-  }
-
-  async getPrivateMessageHistory(userID: string, startMessageID: string, count: number) {
-    const response = (
-      await this.sendApi("get_friend_msg_history", {
-        user_id: userID,
-        message_seq: startMessageID,
-        count,
-      })
-    )?.data.messages;
-    if (!response) {
-      return undefined;
-    }
-    const messages: Message[] = [];
-    response.map((i: any) => {
-      const constructor: MessageConstructor = {};
-      constructor.messageID = i.message_id;
-      constructor.sender = {
-        type: "person",
-        userID: i.user_id,
-        nickname: i.sender.nickname,
-      };
-      constructor.messageType = "private";
-      constructor.sendTimestampMs = i.time;
-      const message = this.makeMessageArray(i.message, constructor);
-      messages.push(message);
-    }); // TODO 未完成
-    return messages;
-  }
-
-  async sendPrivateMessage(message: Message, userID: string): Promise<string | undefined> {
-    logger.info(`发送好友消息：${this.makeLog(message)}`, `${this.bot?.id} => ${userID}`, true);
-    return (
-      await this.sendApi("send_private_msg", {
-        user_id: userID,
-        message: this.makeOnebotMessageArray(message),
-      })
-    )?.data.message_id;
-  }
-
-  async recallMessage(messageID: string) {
-    logger.info(`撤回消息：${messageID}`, this.bot?.id);
-    await this.sendApi("delete_msg", { message_id: messageID });
-    return true;
-  }
-
-  async getGroupList(): Promise<Map<string, InfoGroup> | undefined> {
-    logger.debug("获取群列表", this.bot?.id);
-    const response: {
-      group_id: number;
-      group_name: string;
-      member_count: number;
-      max_member_count: number;
-    }[] = (await this.sendApi("get_group_list"))?.data;
-    if (!response) {
-      return undefined;
-    }
-    const groups = new Map<string, InfoGroup>();
-    response.map((i) => {
-      groups.set(i.group_id.toString(), {
-        groupID: i.group_id.toString(),
-        groupName: i.group_name,
-        memberCount: i.member_count,
-        maxMemberCount: i.max_member_count,
-      });
-    });
-    return groups;
-    // TODO 未完成
-  }
-
-  async getGroupInfo(groupID: string) {
-    const response = (
-      await this.sendApi("get_group_info", {
-        group_id: groupID,
-      })
-    )?.data;
-    return response;
-  }
-
-  async getGroupMemberList(groupID: string) {
-    const response = (
-      await this.sendApi("get_group_member_list", {
-        group_id: groupID,
-      })
-    )?.data;
-    if (!response) {
-      return undefined;
-    }
-    const members = new Map<string, UserGroup>();
-    response.map((i: any) => {
-      members.set(i.user_id.toString(), {
-        type: "group",
-        userID: i.user_id,
-        nickname: i.nickname,
-        sex: i.sex,
-        age: i.age,
-      });
-    });
-    return members; // TODO
-  }
-
-  async getMemberInfo(groupID: string, userID: string) {
-    const response = (
-      await this.sendApi("get_group_member_info", {
-        group_id: groupID,
-        user_id: userID,
-      })
-    )?.data;
-    if (!response) {
-      return undefined;
-    }
-    return response; // TODO
-  }
-
-  async getGroupMessageHistory(groupID: string, startMessageID: string, count = 20) {
-    const response = (
-      await this.sendApi("get_group_msg_history", {
-        group_id: groupID,
-        message_seq: startMessageID,
-        count,
-      })
-    )?.data.messages;
-    if (!response) {
-      return undefined;
-    }
-    const messages: Message[] = [];
-    response.map((i: any) => {
-      const constructor: MessageConstructor = {};
-      constructor.messageID = i.message_id;
-      constructor.sender = {
-        type: "group",
-        userID: i.user_id,
-        nickname: i.sender.nickname,
-      };
-      constructor.messageType = "group";
-      constructor.sendTimestampMs = i.time;
-      const message = this.makeMessageArray(i.message, constructor);
-      messages.push(message);
-    });
-    return messages;
-  }
-
-  async sendGroupMessage(message: Message, groupID: string): Promise<string | undefined> {
-    logger.info(`发送群消息：${this.makeLog(message)}`, `${this.bot?.id} => ${groupID}`, true);
-    return (
-      await this.sendApi("send_group_msg", {
-        group_id: groupID,
-        message: this.makeOnebotMessageArray(message),
-      })
-    )?.data.message_id;
-  }
-
-  async getGuildList() {
-    const response = (await this.sendApi("get_guild_list"))?.data;
-    if (response === null) {
-      return new Map();
-    }
-    if (!response) {
-      return undefined;
-    }
-    const guilds = new Map<string, InfoGuild>();
-    response.map((i: any) => {
-      guilds.set(i.guild_id, {
-        guildID: i.guild_id,
-        guildName: i.guild_name,
-        guildDisplayID: i.guild_display_id,
-      });
-    });
-  }
-
-  async getGuildInfo(guildID: string) {
-    const response = (
-      await this.sendApi("get_guild_meta_by_guest", {
-        guild_id: guildID,
-      })
-    )?.data;
-    if (!response) {
-      return undefined;
-    }
-    return {
-      guildID: response.guild_id,
-      guildName: response.guild_name,
-      guildDisplayID: response.guild_display_id,
-    };
-  }
-
-  async getGuildMemberList(guildID: string) {
-    const map = new Map<string, UserGuild>();
-    let next_token = "";
-    while (true) {
-      const response = (
-        await this.sendApi("get_guild_member_list", {
-          guild_id: guildID,
-          next_token,
-        })
-      )?.data;
-      if (!response) break;
-      for (const i of response.members)
-        map.set(i.tiny_id, {
-          ...i,
-          user_id: i.tiny_id,
-        });
-      if (response.finished) break;
-      next_token = response.next_token;
-    }
-    return map;
-  }
-
-  makeOnebotMessageArray(message: Message): Onebot11.Onebot11MessageSegment[] {
+  messageToOnebot11Message(message: Message): Onebot11.Onebot11MessageSegment[] {
     // TODO 待完成
     const messages: Onebot11.Onebot11MessageSegment[] = [];
     message.messageBlocks.map((i) => {
@@ -868,49 +608,22 @@ export default class OneBotv11Adapter extends Adapter {
           messages.push({ type: "image", data: { file: i.id as any } });
           break;
         case "file":
+          // 上传文件需要单独处理
           break;
       }
     });
     return messages;
   }
 
-  makeMessageArray(
-    // TODO 待完成
-    messageArray: Onebot11.Onebot11MessageSegment[],
-  ) {
-    const message = new MessageBuilder();
-    messageArray.map((i) => {
-      switch (i.type) {
-        case "text":
-          message.addTextBlock(i.data.text);
-          break;
-        case "at":
-          if (i.data.qq === "all") {
-            message.addAtallBlock();
-          } else {
-            message.addAtBlock(i.data.qq.toString());
-          }
-          break;
-        case "face":
-          message.addFaceBlock(i.data.id.toString());
-          break;
-        case "image":
-          message.addImageBlock(i.data.file);
-          break;
-      }
-    });
-    return message.messageBlocks;
-  }
-
   makeLog(message: Message) {
-    return message.toString().replace(/base64:\/\/.*?(,|]|")/g, "base64://...$1"); // TODO ?
+    return message.toString().replace(/base64:\/\/.*?(,|]|")/g, "base64://...$1");
   }
 
   // 原代码在 sendApi 中使用了 echo 存储请求信息，这里我重构为使用 Map
-  async sendApi(action: string, params = {}, data?: any) {
+  async sendApi(action: string, params = {}) {
     const requestID = randomUUID();
     const request = { action, params, echo: requestID };
-    this.ws.sendMessage!(request);
+    this.ws.sendMessage(request);
 
     return new Promise<Onebot11.Onebot11Response | undefined>((resolve, reject) => {
       // 创建包含详细信息的超时错误
@@ -949,6 +662,526 @@ export default class OneBotv11Adapter extends Adapter {
       clearTimeout(entry.timeout);
       this.requests.delete(requestID);
     }
+  }
+
+  async getID() {
+    logger.debug("获取机器人 QQ 号", this.bot?.UUID);
+    return (await this.sendApi("get_login_info"))?.data.user_id as string;
+  }
+
+  async getNickname() {
+    logger.debug("获取机器人昵称", this.bot?.id);
+    return (await this.sendApi("get_login_info"))?.data.nickname as string;
+  }
+
+  async getFriendList() {
+    logger.debug("获取好友列表", this.bot?.id);
+    const response = (await this.sendApi("get_friend_list"))?.data as unknown as {
+      user_id: number;
+      nickname: string;
+      remark: string;
+    }[];
+    if (!response) {
+      return undefined;
+    }
+    const friends = new Map<string, InfoUserPersonal>();
+    response.map((i) => {
+      friends.set(i.user_id.toString(), {
+        type: "person",
+        userID: i.user_id.toString(),
+        userName: i.nickname,
+        remark: i.remark,
+      });
+    });
+    return friends;
+  }
+
+  async getFriendInfo(userID: string): Promise<InfoUserPersonal | undefined> {
+    const response = (
+      await this.sendApi("get_stranger_info", {
+        user_id: userID,
+      })
+    )?.data as unknown as {
+      user_id: number;
+      avatar: string;
+      nickname: string;
+      sign: string;
+      sex: string;
+      age: number;
+      level: number;
+      status: {
+        status_id: number;
+        face_id: number;
+        message: string;
+      };
+      RegisterTime: string;
+      Business: {
+        type: number;
+        name: string;
+        level: number;
+        icon: string;
+        ispro: number;
+        isyear: number;
+      }[];
+    };
+    if (!response) {
+      return undefined;
+    }
+    return {
+      type: "person",
+      userID: response.user_id.toString(),
+      userName: response.nickname,
+      sex:
+        response.sex === "male"
+          ? "male"
+          : response.sex === "female"
+            ? "female"
+            : response.sex === "secret"
+              ? "secret"
+              : undefined,
+      age: response.age,
+      platform: {
+        qq: {
+          level: response.level,
+          avatar: response.avatar,
+          sign: response.sign,
+        },
+      },
+    };
+  }
+
+  async getMessage(messageID: string) {
+    const response = (await this.sendApi("get_msg", { message_id: messageID }))?.data as {
+      time: number;
+      message_type: "private" | "group";
+      message_id: number;
+      real_id: number;
+      sender: {
+        user_id: number;
+        nickname: string;
+      };
+      message: Onebot11.Onebot11MessageSegment[];
+      group_id?: number;
+      group?: boolean;
+    };
+    if (!response) {
+      return undefined;
+    }
+
+    const messageBuilder = new MessageBuilder();
+    messageBuilder.messageID = messageID;
+
+    if (response.group_id) {
+      messageBuilder.messageType = "group";
+      messageBuilder.target = {
+        type: "group",
+        groupID: response.group_id.toString(),
+      };
+      messageBuilder.senderID = response.sender.user_id.toString();
+    } else {
+      messageBuilder.messageType = "private";
+      messageBuilder.target = { userID: this.bot?.id!, type: "person" };
+      messageBuilder.senderID = response.sender.user_id.toString();
+    } // TODO 待实现 guild
+
+    messageBuilder.sendTimestampMs = response.time;
+    const messageBlocks = this.onebot11MessageToMessageBlocks(response.message);
+    messageBuilder.messageBlocks = messageBlocks;
+    return messageBuilder.build();
+  }
+
+  async getPrivateMessageHistory(userID: string, startMessageID: string, count: number) {
+    const response = (
+      await this.sendApi("get_friend_msg_history", {
+        user_id: userID,
+        message_seq: startMessageID,
+        count,
+      })
+    )?.data.messages as {
+      message_type: "private";
+      sub_type: "friend";
+      message_id: number;
+      user_id: number;
+      message: Onebot11.Onebot11MessageSegment[];
+      sender: {
+        user_id: number;
+        nickname: string;
+      };
+      target_id: number;
+    }[];
+    if (!response) {
+      return undefined;
+    }
+    const messages: Message[] = [];
+    response.map((i) => {
+      const messageBuilder = new MessageBuilder();
+      messageBuilder.messageID = i.message_id.toString();
+      messageBuilder.senderID = i.sender.user_id.toString();
+      messageBuilder.target = { type: "person", userID: i.target_id.toString() };
+      messageBuilder.messageType = "private";
+      // messageBuilder.sendTimestampMs = i.time;
+      const messageBlocks = this.onebot11MessageToMessageBlocks(i.message);
+      messageBuilder.messageBlocks = messageBlocks;
+      return messageBuilder.build();
+    });
+    return messages;
+  }
+
+  async sendPrivateMessage(message: Message, userID: string): Promise<string | undefined> {
+    logger.info(`发送好友消息：${this.makeLog(message)}`, `${this.bot?.id} => ${userID}`, true);
+    return (
+      (
+        await this.sendApi("send_private_msg", {
+          user_id: userID,
+          message: this.messageToOnebot11Message(message),
+        })
+      )?.data.message_id as number
+    ).toString();
+  }
+
+  async recallMessage(messageID: string) {
+    logger.info(`撤回消息：${messageID}`, this.bot?.id);
+    const response = await this.sendApi("delete_msg", { message_id: messageID });
+    if (response?.status !== "ok") {
+      logger.error(`撤回消息失败：${response}`, this.bot?.id);
+      return false;
+    }
+    return true;
+  }
+
+  async getGroupList(): Promise<Map<string, InfoGroup> | undefined> {
+    logger.debug("获取群列表", this.bot?.id);
+    const response = (await this.sendApi("get_group_list"))?.data as unknown as {
+      group_id: number;
+      group_name: string;
+      member_count: number;
+      max_member_count: number;
+    }[];
+    if (!response) {
+      return undefined;
+    }
+    const groups = new Map<string, InfoGroup>();
+    response.map((i) => {
+      groups.set(i.group_id.toString(), {
+        groupID: i.group_id.toString(),
+        groupName: i.group_name,
+        memberCount: i.member_count,
+        maxMemberCount: i.max_member_count,
+        members: new Map<string, InfoUserGroup>(),
+      });
+    });
+    return groups;
+  }
+
+  async getGroupInfo(groupID: string) {
+    const response = (
+      await this.sendApi("get_group_info", {
+        group_id: groupID,
+      })
+    )?.data as unknown as {
+      group_id: number;
+      group_name: string;
+      group_memo: string;
+      group_create_time: number;
+      group_level: number;
+      member_count: number;
+      max_member_count: number;
+    };
+    return {
+      groupID: response.group_id.toString(),
+      groupName: response.group_name,
+      memberCount: response.member_count,
+      maxMemberCount: response.max_member_count,
+      remark: response.group_memo,
+      members: new Map(),
+    };
+  }
+
+  async getGroupMemberList(groupID: string) {
+    const response = (
+      await this.sendApi("get_group_member_list", {
+        group_id: groupID,
+      })
+    )?.data as unknown as {
+      group_id: number;
+      user_id: number;
+      nickname: string;
+      card: string;
+      sex: "male" | "female" | "unknown";
+      age: number;
+      area: string;
+      join_time: number;
+      last_sent_time: number;
+      level: string;
+      role: "owner" | "admin" | "member";
+      unfriendly: boolean;
+      title: string;
+      title_expire_time: number;
+      card_changeable: boolean;
+      shut_up_timestamp: number;
+    }[];
+    if (!response) {
+      return undefined;
+    }
+    const members = new Map<string, InfoUserGroup>();
+    response.map((i) => {
+      members.set(i.user_id.toString(), {
+        type: "group",
+        userID: i.user_id.toString(),
+        userName: i.nickname,
+        nickname: i.card,
+        sex: i.sex === "unknown" ? undefined : i.sex,
+        age: i.age,
+      });
+    });
+    return members;
+  }
+
+  async getGroupMemberInfo(groupID: string, userID: string) {
+    const response = (
+      await this.sendApi("get_group_member_info", {
+        group_id: groupID,
+        user_id: userID,
+      })
+    )?.data as unknown as {
+      group_id: number;
+      user_id: number;
+      nickname: string;
+      card: string;
+      sex: "male" | "female" | "unknown";
+      age: number;
+      area: string;
+      join_time: number;
+      last_sent_time: number;
+      level: string;
+      role: "owner" | "admin" | "member";
+      unfriendly: boolean;
+      title: string;
+      title_expire_time: number;
+      card_changeable: boolean;
+      shut_up_timestamp: number;
+    };
+    if (!response) {
+      return undefined;
+    }
+    return {
+      type: "group",
+      userID: response.user_id.toString(),
+      userName: response.nickname,
+      nickname: response.card,
+      sex: response.sex === "unknown" ? undefined : response.sex,
+      age: response.age,
+    } satisfies InfoUserGroup;
+  }
+
+  async getGroupMessageHistory(groupID: string, startMessageID: string, count = 20) {
+    const response = (
+      await this.sendApi("get_group_msg_history", {
+        group_id: groupID,
+        message_seq: startMessageID,
+        count,
+      })
+    )?.data.messages as {
+      message_typ: "group";
+      sub_type: "normal";
+      message_id: number;
+      group_id: number;
+      user_id: number;
+      anonymous: null;
+      message: Onebot11.Onebot11MessageSegment[];
+      raw_message: "string";
+      sender: {
+        user_id: number;
+        nickname: "string";
+        card: "string";
+      };
+    }[];
+    if (!response) {
+      return undefined;
+    }
+    const messages: Message[] = [];
+    response.map((i) => {
+      const messageBuilder = new MessageBuilder();
+      messageBuilder.messageID = i.message_id.toString();
+      messageBuilder.senderID = i.sender.user_id.toString();
+      messageBuilder.messageType = "group";
+      messageBuilder.messageBlocks = this.onebot11MessageToMessageBlocks(i.message);
+      return messageBuilder.build();
+    });
+    return messages;
+  }
+
+  async sendGroupMessage(message: Message, groupID: string): Promise<string | undefined> {
+    logger.info(`发送群消息：${this.makeLog(message)}`, `${this.bot?.id} => ${groupID}`, true);
+    return (
+      (
+        await this.sendApi("send_group_msg", {
+          group_id: groupID,
+          message: this.messageToOnebot11Message(message),
+        })
+      )?.data.message_id as number
+    ).toString();
+  }
+
+  async getGuildList() {
+    const response = (await this.sendApi("get_guild_list"))?.data as unknown as
+      | {
+          guild_id: string;
+          guild_name: string;
+          guild_display_id: number;
+        }[]
+      | null;
+    if (response === null) {
+      return new Map();
+    }
+    if (!response) {
+      return undefined;
+    }
+    const guilds = new Map<string, InfoGuild>();
+    response.map((i) => {
+      guilds.set(i.guild_id, {
+        guildID: i.guild_id,
+        guildName: i.guild_name,
+        channels: new Map<string, InfoChannel>(),
+      });
+    });
+  }
+
+  async getGuildInfo(guildID: string) {
+    const response = (
+      await this.sendApi("get_guild_meta_by_guest", {
+        guild_id: guildID,
+      })
+    )?.data as {
+      guild_id: string;
+      guild_name: string;
+      guild_display_id: number;
+    };
+    if (!response) {
+      return undefined;
+    }
+    return {
+      guildID: response.guild_id,
+      guildName: response.guild_name,
+      guildDisplayID: response.guild_display_id,
+      channels: new Map(),
+    };
+  }
+
+  async getGuildMemberList(guildID: string) {
+    const map = new Map<string, InfoUserGuild>();
+    let next_token = "";
+    while (true) {
+      const response = (
+        await this.sendApi("get_guild_member_list", {
+          guild_id: guildID,
+          next_token,
+        })
+      )?.data as {
+        members: {
+          tiny_id: string;
+          title: string;
+          nickname: string;
+          role_id: string;
+          role_name: string;
+        }[];
+        next_token: string;
+        finished: boolean;
+      };
+      if (!response) break;
+
+      for (const i of response.members)
+        map.set(i.tiny_id, {
+          type: "guild",
+          userID: i.tiny_id,
+          nickname: i.nickname,
+          platform: {
+            qq: {
+              role_id: i.role_id,
+              role_name: i.role_name,
+              title: i.title,
+            },
+          },
+        });
+      if (response.finished) break;
+      next_token = response.next_token;
+    }
+    return map;
+  }
+
+  async getGuildMemberInfo(guildID: string, userID: string) {
+    const response = (
+      await this.sendApi("get_guild_member_profile", {
+        guild_id: guildID,
+        user_id: userID,
+      })
+    )?.data as {
+      tiny_id: string;
+      nickname: string;
+      avatar_url: string;
+      join_time: number;
+      roles: {
+        role_id: string;
+        role_name: string;
+      }[];
+    };
+    if (!response) return undefined;
+
+    return {
+      type: "guild",
+      userID: response.tiny_id,
+      nickname: response.nickname,
+    } satisfies InfoUserGuild;
+  }
+
+  async getChannelList(guildID: string) {
+    const response = (
+      await this.sendApi("get_guild_channel_list", {
+        guild_id: guildID,
+      })
+    )?.data as unknown as {
+      owner_guild_id: string;
+      channel_id: string;
+      channel_type: number;
+      channel_name: string;
+      create_time: number;
+      creator_tiny_id: string;
+      talk_permission: number;
+      visible_type: number;
+      current_slow_mode: number;
+      slow_modes: {
+        slow_mode_key: number;
+        slow_mode_text: string;
+        speak_frequency: number;
+        slow_mode_circle: number;
+      }[];
+    }[];
+    if (!response) return undefined;
+
+    const channel = new Map<string, InfoChannel>();
+    for (const data of response) {
+      channel.set(data.channel_id, {
+        channelID: data.channel_id,
+        channelName: data.channel_name,
+        platform: { qq: { ...response } }, // TODO 临时
+      });
+    }
+    return channel;
+  }
+
+  async sendGuildMessage(message: Message, guildID: string, channelID: string) {
+    logger.info(
+      `发送频道消息：${this.makeLog(message)}`,
+      `${this.bot?.id}] => ${guildID}-${channelID}`,
+      true,
+    );
+    return (
+      await this.sendApi("send_guild_channel_msg", {
+        guild_id: guildID,
+        channel_id: channelID,
+        message: this.messageToOnebot11Message(message),
+      })
+    )?.data.message_id as string | undefined;
   }
 
   // async makeFile(file, opts) {
@@ -994,25 +1227,6 @@ export default class OneBotv11Adapter extends Adapter {
   //   )?.data.message_id;
   // }
 
-  // async sendGuildMessage(
-  //   message: Message,
-  //   guildID: string,
-  //   channelID: string
-  // ): Promise<string | undefined> {
-  //   logger.info(
-  //     `发送频道消息：${this.makeLog(message)}`,
-  //     `${this.bot?.id}] => ${guildID}-${channelID}`,
-  //     true
-  //   );
-  //   return (
-  //     await this.sendApi("send_guild_channel_msg", {
-  //       guild_id: guildID,
-  //       channel_id: channelID,
-  //       message: this.makeOnebotMessageArray(message),
-  //     })
-  //   )?.data.message_id;
-  // }
-
   // async sendGroupForwardMsg(data, msg) {
   //   logger.info(
   //     `发送群转发消息：${this.makeLog(msg)}`,
@@ -1022,30 +1236,6 @@ export default class OneBotv11Adapter extends Adapter {
   //   return data.bot.sendApi("send_group_forward_msg", {
   //     group_id: data.group_id,
   //     messages: await this.makeForwardMessage(msg),
-  //   });
-  // }
-
-  // async getGuildChannelArray(data) {
-  //   return (
-  //     (
-  //       await data.bot.sendApi("get_guild_channel_list", {
-  //         guild_id: data.guild_id,
-  //       })
-  //     ).data || []
-  //   );
-  // }
-
-  // async getGuildChannelMap(data) {
-  //   const map = new Map();
-  //   for (const i of await this.getGuildChannelArray(data))
-  //     map.set(i.channel_id, i);
-  //   return map;
-  // }
-
-  // getGuildMemberInfo(data) {
-  //   return data.bot.sendApi("get_guild_member_profile", {
-  //     guild_id: data.guild_id,
-  //     user_id: data.user_id,
   //   });
   // }
 
@@ -1328,162 +1518,5 @@ export default class OneBotv11Adapter extends Adapter {
 
   // deleteEssenceMsg(data, message_id) {
   //   return data.bot.sendApi("delete_essence_msg", { message_id });
-  // }
-
-  // async connect(data, ws) {
-  //   Bot[data.self_id] = {
-  //     adapter: this,
-  //     ws: ws,
-  //     sendApi: this.sendApi.bind(this, data, ws),
-  //     stat: {
-  //       start_time: data.time,
-  //       stat: {},
-  //       get lost_pkt_cnt() {
-  //         return this.stat.packet_lost;
-  //       },
-  //       get lost_times() {
-  //         return this.stat.lost_times;
-  //       },
-  //       get recv_msg_cnt() {
-  //         return this.stat.message_received;
-  //       },
-  //       get recv_pkt_cnt() {
-  //         return this.stat.packet_received;
-  //       },
-  //       get sent_msg_cnt() {
-  //         return this.stat.message_sent;
-  //       },
-  //       get sent_pkt_cnt() {
-  //         return this.stat.packet_sent;
-  //       },
-  //     },
-  //     model: "TRSS Yunzai ",
-
-  //     info: {},
-  //     get uin() {
-  //       return this.info.user_id;
-  //     },
-  //     get nickname() {
-  //       return this.info.nickname;
-  //     },
-  //     get avatar() {
-  //       return `https://q.qlogo.cn/g?b=qq&s=0&nk=${this.uin}`;
-  //     },
-
-  //     setProfile: this.setProfile.bind(this, data),
-  //     setNickname: (nickname) => this.setProfile(data, { nickname }),
-  //     setAvatar: this.setAvatar.bind(this, data),
-
-  //     pickFriend: this.pickFriend.bind(this, data),
-  //     get pickUser() {
-  //       return this.pickFriend;
-  //     },
-  //     getFriendArray: this.getFriendArray.bind(this, data),
-  //     getFriendList: this.getFriendList.bind(this, data),
-  //     getFriendMap: this.getFriendMap.bind(this, data),
-  //     fl: new Map(),
-
-  //     pickMember: this.pickMember.bind(this, data),
-  //     pickGroup: this.pickGroup.bind(this, data),
-  //     getGroupArray: this.getGroupArray.bind(this, data),
-  //     getGroupList: this.getGroupList.bind(this, data),
-  //     getGroupMap: this.getGroupMap.bind(this, data),
-  //     getGroupMemberMap: this.getGroupMemberMap.bind(this, data),
-  //     gl: new Map(),
-  //     gml: new Map(),
-
-  //     request_list: [],
-  //     getSystemMsg() {
-  //       return this.request_list;
-  //     },
-  //     setFriendAddRequest: this.setFriendAddRequest.bind(this, data),
-  //     setGroupAddRequest: this.setGroupAddRequest.bind(this, data),
-
-  //     setEssenceMessage: this.setEssenceMsg.bind(this, data),
-  //     removeEssenceMessage: this.deleteEssenceMsg.bind(this, data),
-
-  //     cookies: {},
-  //     getCookies(domain) {
-  //       return this.cookies[domain];
-  //     },
-  //     getCsrfToken() {
-  //       return this.bkn;
-  //     },
-  //   };
-  //   data.bot = Bot[data.self_id];
-
-  //   if (!Bot.uin.includes(data.self_id)) Bot.uin.push(data.self_id);
-
-  //   data.bot
-  //     .sendApi("_set_model_show", {
-  //       model: data.bot.model,
-  //       model_show: data.bot.model,
-  //     })
-  //     .catch(() => {});
-
-  //   data.bot.info = (
-  //     await data.bot.sendApi("get_login_info").catch((i) => i.error)
-  //   ).data;
-  //   data.bot.guild_info = (
-  //     await data.bot.sendApi("get_guild_service_profile").catch((i) => i.error)
-  //   ).data;
-  //   data.bot.clients = (
-  //     await data.bot.sendApi("get_online_clients").catch((i) => i.error)
-  //   ).clients;
-  //   data.bot.version = {
-  //     ...(await data.bot.sendApi("get_version_info").catch((i) => i.error))
-  //       .data,
-  //     id: this.id,
-  //     name: this.name,
-  //     get version() {
-  //       return this.app_full_name || `${this.app_name} v${this.app_version}`;
-  //     },
-  //   };
-
-  //   if (
-  //     (data.bot.cookies["qun.qq.com"] = (
-  //       await data.bot
-  //         .sendApi("get_cookies", { domain: "qun.qq.com" })
-  //         .catch((i) => i.error)
-  //     ).cookies)
-  //   )
-  //     for (const i of [
-  //       "aq",
-  //       "connect",
-  //       "docs",
-  //       "game",
-  //       "gamecenter",
-  //       "haoma",
-  //       "id",
-  //       "kg",
-  //       "mail",
-  //       "mma",
-  //       "office",
-  //       "openmobile",
-  //       "qqweb",
-  //       "qzone",
-  //       "ti",
-  //       "v",
-  //       "vip",
-  //       "y",
-  //     ]) {
-  //       const domain = `${i}.qq.com`;
-  //       data.bot.cookies[domain] = await data.bot
-  //         .sendApi("get_cookies", { domain })
-  //         .then((i) => i.cookies)
-  //         .catch((i) => i.error);
-  //     }
-  //   data.bot.bkn = (
-  //     await data.bot.sendApi("get_csrf_token").catch((i) => i.error)
-  //   ).token;
-
-  //   data.bot.getFriendMap();
-  //   data.bot.getGroupMemberMap();
-
-  //   logger.mark(
-  //     `${this.name}(${this.id}) ${data.bot.version.version} 已连接`,
-  //     data.self_id
-  //   );
-  //   Bot.em(`connect.${data.self_id}`, data);
   // }
 }
