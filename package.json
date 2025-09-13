@@ -17,6 +17,7 @@
     "app": "node .",
     "app:old": "node . --experimental-strip-types",
     "check": "tsc --noEmit",
+    "format": "prettier --write lib/**/*.ts adapters/**/*.ts plugins/**/*.ts ./*.ts package.json README.md",
     "lint": "eslint --flag unstable_native_nodejs_ts_config"
   },
   "dependencies": {
