@@ -1,6 +1,6 @@
 {
   "name": "yuzai",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "基于 TRSS-Yunzai 重新设计实现的机器人框架",
   "keywords": [],
   "license": "GPL-3.0-or-later",
