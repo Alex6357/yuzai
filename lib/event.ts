@@ -140,9 +140,23 @@ interface GroupRequestData {
   groupID: string;
 }
 
+interface GroupJoinData {
+  timestamp: number;
+  groupID: string;
+  userID: string;
+}
+
+interface GroupLeaveData {
+  timestamp: number;
+  groupID: string;
+  userID: string;
+}
+
 interface NoticeEventDataMap {
   "notice.friend.request": FriendRequestData;
   "notice.group.request": GroupRequestData;
+  "notice.group.member_join": GroupJoinData;
+  "notice.group.member_leave": GroupLeaveData;
 }
 
 type NoticeEventData<T extends NoticeEventIDs | string> = T extends keyof NoticeEventDataMap
@@ -153,11 +167,13 @@ type Event = BaseEvent | ConnectEvent | MessageEvent | NoticeEvent<NoticeEventID
 
 type MessageEventIDs = "message" | "message.private" | "message.group" | "message.guild";
 
-type NoticeEventIDs = "notice.friend.request" | "notice.group.request";
+type NoticeEventIDs =
+  | "notice.friend.request"
+  | "notice.group.request"
+  | "notice.group.member_join"
+  | "notice.group.member_leave";
 // | "notice.friend.accept"
 // | "notice.friend.reject"
-// | "notice.group.increase"
-// | "notice.group.decrease"
 // | "notice.group.admin"
 // | "notice.group.notice"
 // | "notice.group.upload"
