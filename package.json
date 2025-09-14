@@ -17,8 +17,13 @@
     "app": "node .",
     "app:old": "node . --experimental-strip-types",
     "check": "tsc --noEmit",
-    "format": "prettier --write lib/**/*.ts adapters/**/*.ts plugins/**/*.ts ./*.ts package.json README.md",
+    "format": "prettier --write **/*.ts **/*.js **/*.md **/*.json",
     "lint": "eslint --flag unstable_native_nodejs_ts_config"
+  },
+  "exports": {
+    "./extensions": "./lib/extensions/index.ts",
+    "./extensions/*": "./lib/extensions/*/index.ts",
+    "./*": "./lib/*.ts"
   },
   "dependencies": {
     "chalk": "^5.6.2",
@@ -57,8 +62,5 @@
     "patchedDependencies": {
       "log4js@6.9.1": "patch/log4js.patch"
     }
-  },
-  "optionalDependencies": {
-    "realm": "^20.2.0"
   }
 }

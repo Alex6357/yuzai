@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 
-import { PlatformInfo, type Target } from "./types.ts";
-import logger from "./logger.ts";
+import { PlatformInfo, type Target } from "yuzai/types";
+import logger from "yuzai/logger";
 
 abstract class BaseMessageBlock {
   // TODO 确定 TYPE 范围

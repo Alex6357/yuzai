@@ -21,6 +21,6 @@
     "typescript": "^5.9.2"
   },
   "peerDependencies": {
-    "yuzai": "^0.1.0"
+    "yuzai": "workspace:.."
   }
 }

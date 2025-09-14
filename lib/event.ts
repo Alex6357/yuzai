@@ -1,8 +1,8 @@
-import Bot from "./bot.ts";
-import logger from "./logger.ts";
-import Message, { MessageBuilder } from "./message.ts";
-import { PlatformInfo } from "./types.ts";
-import type { TargetGroup } from "./types.ts";
+import Bot from "yuzai/bot";
+import logger from "yuzai/logger";
+import Message, { MessageBuilder } from "yuzai/message";
+import { PlatformInfo } from "yuzai/types";
+import type { TargetGroup } from "yuzai/types";
 
 abstract class BaseEvent {
   protected _bot: Bot;

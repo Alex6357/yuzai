@@ -3,19 +3,19 @@
 import type { UUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 
-import Adapter from "./adapter.ts";
-import logger from "./logger.ts";
-import Plugin from "./plugin.ts";
-import Message, { MessageBuilder } from "./message.ts";
+import Adapter from "yuzai/adapter";
+import logger from "yuzai/logger";
+import Plugin from "yuzai/plugin";
+import Message, { MessageBuilder } from "yuzai/message";
 import {
   MessageEvent,
   ConnectEvent,
   NoticeEvent,
   type NoticeEventIDs,
   type NoticeEventData,
-} from "./event.ts";
-import { PlatformInfo } from "./types.ts";
-import type { InfoGroup, InfoGuild, InfoUserGroup, InfoUserPersonal, Target } from "./types.ts";
+} from "yuzai/event";
+import { PlatformInfo } from "yuzai/types";
+import type { InfoGroup, InfoGuild, InfoUserGroup, InfoUserPersonal, Target } from "yuzai/types";
 
 // noinspection JSUnusedGlobalSymbols
 class Bot extends EventEmitter {

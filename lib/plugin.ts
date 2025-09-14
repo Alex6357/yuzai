@@ -2,9 +2,9 @@ import EventEmitter from "node:events";
 
 import { CronExpressionParser } from "cron-parser";
 
-import { ConnectEvent, MessageEvent, NoticeEvent } from "./event.ts";
-import type { EventIDs, MessageEventIDs, NoticeEventIDs } from "./event.ts";
-import logger from "./logger.ts";
+import { ConnectEvent, MessageEvent, NoticeEvent } from "yuzai/event";
+import type { EventIDs, MessageEventIDs, NoticeEventIDs } from "yuzai/event";
+import logger from "yuzai/logger";
 
 type InteractionKey =
   | `private:${string}`

@@ -4,13 +4,13 @@
 import { randomUUID, type UUID } from "crypto";
 import { EventEmitter } from "events";
 
-import Bot from "./bot.ts";
-import Adapter from "./adapter.ts";
-import Plugin from "./plugin.ts";
-import { loadPlugins, loadAdapters, packageTips } from "./loader.ts";
-import * as utils from "./utils.ts";
-import logger from "./logger.ts";
-import config from "./config.ts";
+import Bot from "yuzai/bot";
+import Adapter from "yuzai/adapter";
+import Plugin from "yuzai/plugin";
+import { loadPlugins, loadAdapters, packageTips } from "yuzai/loader";
+import * as utils from "yuzai/utils";
+import logger from "yuzai/logger";
+import config from "yuzai/config";
 
 class Client extends EventEmitter {
   /** 所有 Bot 实例 */

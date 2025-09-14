@@ -3,8 +3,8 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import client from "./lib/client.ts";
-import config from "./lib/config.ts";
+import client from "yuzai/client";
+import config from "yuzai/config";
 
 // 设置进程标题
 process.title = `雨仔 v${config.system.version} by Alex11`;

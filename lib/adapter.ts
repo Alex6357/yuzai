@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 
-import Bot from "./bot.ts";
-import Message from "./message.ts";
+import Bot from "yuzai/bot";
+import Message from "yuzai/message";
 import type {
   InfoChannel,
   InfoGroup,
@@ -9,8 +9,8 @@ import type {
   InfoUserGroup,
   InfoUserGuild,
   InfoUserPersonal,
-} from "./types.ts";
-import client from "./client.ts";
+} from "yuzai/types";
+import client from "yuzai/client";
 
 /** 定义一个适配器接口，用于描述不同消息平台的通用功能。 */
 abstract class Adapter extends EventEmitter {

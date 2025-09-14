@@ -14,8 +14,8 @@ import chokidar, { FSWatcher } from "chokidar";
 // import md5 from "md5";
 // import { ulid } from "ulid";
 
-// import config from "./config.ts";
-import logger from "./logger.ts";
+// import config from "yuzai/config";
+import logger from "yuzai/logger";
 
 export const execPromise = promisify(childProcessExec);
 export const execFilePromise = promisify(childProcessExecFile);

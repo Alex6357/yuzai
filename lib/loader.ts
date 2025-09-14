@@ -73,22 +73,13 @@ const adapters = new Map<string, typeof Adapter>();
  * @param file 模块文件路径
  */
 async function checkAndInstallDependencies(file: string, isAdapter = false) {
-  const baseDir = isAdapter ? getAdapterDir() : getPluginDir();
-  const fullPath = path.join(baseDir, file);
-
-  // 只有当是目录且包含index文件，或者在子目录中的文件才需要检查依赖
-  const isDirectoryWithIndex =
-    path.dirname(file) !== "." && (file.endsWith("/index.js") || file.endsWith("/index.ts"));
-  const isFileInSubdirectory =
-    file.includes("/") && !(file.endsWith("/index.js") || file.endsWith("/index.ts"));
-
-  // 只处理情况2和情况3（含有index的文件夹和不含index的文件夹下的单个文件）
-  if (!isDirectoryWithIndex && !isFileInSubdirectory) {
+  // 只有当是 xxx/xxx.ts 或 xxx/index.ts 时才检查依赖
+  if (!file.includes("/")) {
     return;
   }
 
   // 获取模块目录路径
-  const moduleDir = path.dirname(fullPath);
+  const moduleDir = path.join(isAdapter ? adapterDirname : pluginDirname, path.dirname(file));
 
   // 获取或创建安装状态
   if (!getInstallStatus(moduleDir)) {
@@ -103,7 +94,7 @@ async function checkAndInstallDependencies(file: string, isAdapter = false) {
 
   try {
     // 检查是否存在 package.json
-    const packageJsonPath = path.join(moduleDir, "package.json");
+    const packageJsonPath = path.join(config.rootDir, moduleDir, "package.json");
     await fs.access(packageJsonPath);
 
     // 检查安装状态，如果没有状态直接进入安装流程

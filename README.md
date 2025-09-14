@@ -22,14 +22,14 @@
 
    ```bash
    cd yuzai
-   npm install --production
+   pnpm install --production
    ```
 
 3. 启动项目
 
    ```bash
-   npm run app
-   # 或 npm run app:old，根据 Nodejs 版本选择启动方式
+   pnpm app
+   # 或 pnpm app:old，根据 Nodejs 版本选择启动方式
    ```
 
 ## 开发进度

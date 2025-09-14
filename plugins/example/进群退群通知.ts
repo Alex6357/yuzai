@@ -1,6 +1,6 @@
-import { MessageBuilder } from "../../lib/message.ts";
-import Plugin from "../../lib/plugin.ts";
-import { importExtension } from "../../lib/extensions/index.ts";
+import { MessageBuilder } from "yuzai/message";
+import Plugin from "yuzai/plugin";
+import { importExtension } from "yuzai/extensions";
 
 const { default: redis } = await importExtension("redis");
 

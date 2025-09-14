@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import toml from "toml";
 
-import logger from "./logger.ts";
+import logger from "yuzai/logger";
 
 /** 群组设置 */
 interface GroupConfig {

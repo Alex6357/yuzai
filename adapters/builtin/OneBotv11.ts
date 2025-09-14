@@ -2,7 +2,7 @@ import { randomUUID, type UUID } from "crypto";
 
 import type WebSocket from "ws";
 
-import Adapter from "../../lib/adapter.ts";
+import Adapter from "yuzai/adapter";
 import Message, {
   MessageBuilder,
   TextBlock,
@@ -10,10 +10,10 @@ import Message, {
   AtallBlock,
   FaceBlock,
   type MessageBlock,
-} from "../../lib/message.ts";
-import logger from "../../lib/logger.ts";
-import { importExtension } from "../../lib/extensions/index.ts";
-import type * as Onebot11 from "../../lib/extensions/onebot_11_types/index.ts";
+} from "yuzai/message";
+import logger from "yuzai/logger";
+import { importExtension } from "yuzai/extensions";
+import type * as Onebot11 from "yuzai/extensions/onebot_11_types";
 import type {
   InfoChannel,
   InfoGroup,
@@ -21,8 +21,8 @@ import type {
   InfoUserGroup,
   InfoUserGuild,
   InfoUserPersonal,
-} from "../../lib/types.ts";
-import type Bot from "../../lib/bot.ts";
+} from "yuzai/types";
+import type Bot from "yuzai/bot";
 
 const { default: WS } = await importExtension("ws");
 

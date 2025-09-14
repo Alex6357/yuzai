@@ -2,12 +2,12 @@ import readline from "node:readline/promises";
 import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
 
-import * as utils from "../../lib/utils.ts";
-import logger from "../../lib/logger.ts";
-import Adapter from "../../lib/adapter.ts";
-import Message, { MessageBuilder } from "../../lib/message.ts";
-import type { InfoUserPersonal } from "../../lib/types.ts";
-import client from "../../lib/client.ts";
+import * as utils from "yuzai/utils";
+import logger from "yuzai/logger";
+import Adapter from "yuzai/adapter";
+import Message, { MessageBuilder } from "yuzai/message";
+import type { InfoUserPersonal } from "yuzai/types";
+import client from "yuzai/client";
 
 class StdioAdapter extends Adapter {
   readonly id = "stdio";

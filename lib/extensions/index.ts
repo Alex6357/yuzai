@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import logger from "../logger.ts";
 import config from "../config.ts";
@@ -24,8 +25,8 @@ export async function importExtension(
   } = {},
 ) {
   // 构建插件路径
-  const extensionDir = path.join(config.rootDir, "lib", "extensions", extensionName);
-  const modulePath = path.join(extensionDir, "index.ts");
+  const extensionDir = path.join("lib", "extensions", extensionName);
+  const modulePath = path.join(config.rootDir, extensionDir, "index.ts");
   const resolvedPath = path.resolve(modulePath);
 
   const maxRetries = options.maxRetries ?? INSTALL_RETRY_CONFIG.maxRetries;
@@ -69,7 +70,7 @@ export async function importExtension(
     }
 
     // 导入模块
-    const module = await import(resolvedPath);
+    const module = await import(pathToFileURL(resolvedPath).toString());
     return module;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
   } catch (error: any) {

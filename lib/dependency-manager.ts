@@ -2,9 +2,9 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 
-import logger from "./logger.ts";
-import config from "./config.ts";
-import { execPromise } from "./utils.ts";
+import logger from "yuzai/logger";
+import config from "yuzai/config";
+import { execPromise } from "yuzai/utils";
 
 export interface InstallStatus {
   /**
@@ -62,7 +62,9 @@ async function isPnpmAvailable(): Promise<boolean> {
  * 获取要使用的包管理器命令
  */
 async function getPackageManagerCommand(): Promise<string> {
-  return (await isPnpmAvailable()) ? "pnpm install --prod" : "npm install --omit=dev";
+  return (await isPnpmAvailable())
+    ? "pnpm --force install --prod"
+    : "npm --force install --omit=dev";
 }
 
 /**
@@ -180,7 +182,7 @@ export async function installDependencies(
 
   try {
     // 检查 node_modules 是否存在
-    const nodeModulesPath = path.join(moduleDir, "node_modules");
+    const nodeModulesPath = path.join(config.rootDir, moduleDir, "node_modules");
     let needInstall = true;
 
     try {
@@ -201,10 +203,12 @@ export async function installDependencies(
 
       while (retries < maxRetries && !installSuccess) {
         try {
-          const { stdout, stderr } = await execPromise(packageManagerCommand, {
-            cwd: moduleDir,
-            maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
-          });
+          const { stdout, stderr } = await execPromise(
+            `${packageManagerCommand} --dir ./${(config.rootDir, moduleDir)}`,
+            {
+              maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
+            },
+          );
 
           if (stdout) logger.debug(stdout, logContext);
           if (stderr) logger.warn(stderr, logContext);

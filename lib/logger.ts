@@ -4,7 +4,7 @@ import util from "node:util";
 import log4js from "log4js";
 import chalk from "chalk";
 
-import config from "./config.ts";
+import config from "yuzai/config";
 
 if (!fs.existsSync("logs")) fs.mkdirSync("logs");
 
