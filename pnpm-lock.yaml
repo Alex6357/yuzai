@@ -37,6 +37,9 @@ importers:
       toml:
         specifier: ^3.0.0
         version: 3.0.0
+      yuzai:
+        specifier: 'link:'
+        version: 'link:'
     devDependencies:
       '@eslint/compat':
         specifier: ^1.3.2

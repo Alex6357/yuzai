@@ -47,6 +47,25 @@ export const INSTALL_RETRY_CONFIG = {
 };
 
 /**
+ * 检查 pnpm 是否可用
+ */
+async function isPnpmAvailable(): Promise<boolean> {
+  try {
+    await execPromise("pnpm --version");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 获取要使用的包管理器命令
+ */
+async function getPackageManagerCommand(): Promise<string> {
+  return (await isPnpmAvailable()) ? "pnpm install --prod" : "npm install --omit=dev";
+}
+
+/**
  * 保存安装状态到文件
  */
 async function saveInstallStatus() {
@@ -173,6 +192,7 @@ export async function installDependencies(
 
     // 如果需要安装依赖或强制重新安装
     if (needInstall || currentStatus.error) {
+      const packageManagerCommand = await getPackageManagerCommand();
       logger.mark(`正在为模块 ${path.basename(moduleDir)} 安装依赖...`, logContext);
 
       // 尝试安装依赖（带重试机制）
@@ -181,7 +201,7 @@ export async function installDependencies(
 
       while (retries < maxRetries && !installSuccess) {
         try {
-          const { stdout, stderr } = await execPromise("npm install", {
+          const { stdout, stderr } = await execPromise(packageManagerCommand, {
             cwd: moduleDir,
             maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
           });
