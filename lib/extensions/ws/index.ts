@@ -5,10 +5,10 @@ import fs from "node:fs/promises";
 
 import WebSocket, { WebSocketServer } from "ws";
 
-import logger from "../../logger.ts";
-import config from "../../config.ts";
-import * as utils from "../../utils.ts";
-import client from "../../client.ts";
+import logger from "yuzai/logger";
+import config from "yuzai/config";
+import * as utils from "yuzai/utils";
+import client from "yuzai/client";
 
 type wsHandler = (
   message: WebSocket.RawData,

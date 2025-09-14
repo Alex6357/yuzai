@@ -2,10 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { createClient, type RedisClientType } from "redis";
 
-import config from "../../config.ts";
-import logger from "../../logger.ts";
-import * as utils from "../../utils.ts";
-import client from "../../client.ts";
+import config from "yuzai/config";
+import logger from "yuzai/logger";
+import * as utils from "yuzai/utils";
+import client from "yuzai/client";
 
 interface RedisOpts {
   socket: {
