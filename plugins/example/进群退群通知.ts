@@ -1,6 +1,8 @@
 import { MessageBuilder } from "../../lib/message.ts";
 import Plugin from "../../lib/plugin.ts";
-import redis from "../../lib/plugins/redis.ts";
+import { importExtension } from "../../lib/extensions/index.ts";
+
+const { default: redis } = await importExtension("redis");
 
 const helpMessage = `进退群通知插件
 当有人进群或退群时，会发送一条通知消息

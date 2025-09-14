@@ -11,6 +11,14 @@ import config from "./config.ts";
 import * as utils from "./utils.ts";
 import Plugin from "./plugin.ts";
 import Adapter from "./adapter.ts";
+import {
+  INSTALL_RETRY_CONFIG,
+  waitForInstallation,
+  installDependencies,
+  getInstallStatus,
+  setInstallStatus,
+  loadPersistentInstallStatus,
+} from "./dependency-manager.ts";
 
 /** 插件目录名："plugins" */
 const pluginDirname = "plugins";
@@ -61,12 +69,99 @@ export function getAdapterDir() {
 const adapters = new Map<string, typeof Adapter>();
 
 /**
+ * 检查并安装模块依赖
+ * @param file 模块文件路径
+ */
+async function checkAndInstallDependencies(file: string, isAdapter = false) {
+  const baseDir = isAdapter ? getAdapterDir() : getPluginDir();
+  const fullPath = path.join(baseDir, file);
+
+  // 只有当是目录且包含index文件，或者在子目录中的文件才需要检查依赖
+  const isDirectoryWithIndex =
+    path.dirname(file) !== "." && (file.endsWith("/index.js") || file.endsWith("/index.ts"));
+  const isFileInSubdirectory =
+    file.includes("/") && !(file.endsWith("/index.js") || file.endsWith("/index.ts"));
+
+  // 只处理情况2和情况3（含有index的文件夹和不含index的文件夹下的单个文件）
+  if (!isDirectoryWithIndex && !isFileInSubdirectory) {
+    return;
+  }
+
+  // 获取模块目录路径
+  const moduleDir = path.dirname(fullPath);
+
+  // 获取或创建安装状态
+  if (!getInstallStatus(moduleDir)) {
+    setInstallStatus(moduleDir, {
+      installing: false,
+      installed: false,
+      error: false,
+    });
+  }
+
+  const status = getInstallStatus(moduleDir);
+
+  try {
+    // 检查是否存在 package.json
+    const packageJsonPath = path.join(moduleDir, "package.json");
+    await fs.access(packageJsonPath);
+
+    // 检查安装状态，如果没有状态直接进入安装流程
+    if (status) {
+      // 检查是否需要重新安装
+      const shouldReinstall =
+        (status.error && !status.installing) ||
+        (status.installed &&
+          status.lastInstallTime &&
+          Date.now() - status.lastInstallTime > INSTALL_RETRY_CONFIG.reinstallInterval);
+
+      // 如果正在安装，等待安装完成
+      if (status.installing) {
+        await waitForInstallation(moduleDir);
+      }
+
+      // 如果尚未安装或需要重新安装
+      if (!status.installed || shouldReinstall) {
+        await installDependencies(moduleDir, INSTALL_RETRY_CONFIG.maxRetries, "Loader", true);
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+  } catch (error: any) {
+    // 如果是 package.json 不存在的错误，跳过安装（不视为错误）
+    if (error.code === "ENOENT" && error.path && error.path.endsWith("package.json")) {
+      return;
+    }
+
+    // 其他错误记录状态
+    if (!getInstallStatus(moduleDir)) {
+      setInstallStatus(moduleDir, {
+        installing: false,
+        installed: false,
+        error: true,
+      });
+    } else {
+      const currentStatus = getInstallStatus(moduleDir);
+      if (currentStatus) {
+        currentStatus.error = true;
+        currentStatus.installing = false;
+      }
+    }
+
+    logger.error(`模块依赖检查失败 ${moduleDir}: ${error.message}`, "Loader");
+    throw error;
+  }
+}
+
+/**
  * 加载全部插件
  * @param reload 是否全部重新加载
  */
 export async function loadPlugins(reload = false) {
   if (reload) plugins.clear();
   if (plugins.size) return;
+
+  // 加载持久化的安装状态
+  await loadPersistentInstallStatus();
 
   logger.info("-----------", "Loader");
   logger.info("加载插件中...", "Loader");
@@ -168,12 +263,6 @@ async function scanFiles(dir: string) {
   return filesList;
 }
 
-/**
- * 加载单个插件
- * @param file 要加载的插件文件，从插件目录开始的相对路径
- * @param packageError 插件加载过程中遇到的 "Cannot find package" 错误的列表，
- * 内容为 `{ error: error, file: filePath }`
- */
 async function loadPlugin(file: string, reload = false) {
   // 检查插件是否存在
   try {
@@ -185,6 +274,15 @@ async function loadPlugin(file: string, reload = false) {
       return;
     }
     throw error;
+  }
+
+  // 检查并安装依赖（仅对情况2和3）
+  try {
+    await checkAndInstallDependencies(file, false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+  } catch (error: any) {
+    logger.error(`插件依赖安装失败 ${logger.red(file)}: ${error.message}`, "Loader");
+    return;
   }
 
   /** 记录加载耗时 */
@@ -355,6 +453,9 @@ export async function loadAdapters(
   if (reload) adapters.clear();
   if (adapters.size) return;
 
+  // 加载持久化的安装状态
+  await loadPersistentInstallStatus();
+
   logger.info("加载适配器中...", "Loader");
 
   const files = await scanAdapters();
@@ -388,11 +489,6 @@ async function scanAdapters() {
   return scanFiles(getAdapterDir());
 }
 
-/**
- * 加载单个适配器
- * @param file 要加载的适配器文件，从适配器目录开始的相对路径
- * @param reload 是否重新加载适配器
- */
 async function loadAdapter(file: string, reload = false) {
   // 检查适配器是否存在
   try {
@@ -404,6 +500,15 @@ async function loadAdapter(file: string, reload = false) {
       return;
     }
     throw error;
+  }
+
+  // 检查并安装依赖（仅对情况2和3）
+  try {
+    await checkAndInstallDependencies(file, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+  } catch (error: any) {
+    logger.error(`适配器依赖安装失败 ${logger.red(file)}: ${error.message}`, "Loader");
+    return;
   }
 
   /** 记录加载耗时 */

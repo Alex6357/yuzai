@@ -1,8 +1,8 @@
 import { randomUUID, type UUID } from "crypto";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
-import Adapter from "../lib/adapter.ts";
+import Adapter from "../../lib/adapter.ts";
 import Message, {
   MessageBuilder,
   TextBlock,
@@ -10,10 +10,10 @@ import Message, {
   AtallBlock,
   FaceBlock,
   type MessageBlock,
-} from "../lib/message.ts";
-import WS from "../lib/plugins/ws.ts";
-import logger from "../lib/logger.ts";
-import * as Onebot11 from "../lib/plugins/onebot_11_types.ts";
+} from "../../lib/message.ts";
+import logger from "../../lib/logger.ts";
+import { importExtension } from "../../lib/extensions/index.ts";
+import type * as Onebot11 from "../../lib/extensions/onebot_11_types/index.ts";
 import type {
   InfoChannel,
   InfoGroup,
@@ -21,8 +21,10 @@ import type {
   InfoUserGroup,
   InfoUserGuild,
   InfoUserPersonal,
-} from "../lib/types.ts";
-import type Bot from "../lib/bot.ts";
+} from "../../lib/types.ts";
+import type Bot from "../../lib/bot.ts";
+
+const { default: WS } = await importExtension("ws");
 
 export default class OneBotv11Adapter extends Adapter {
   readonly id = "onebotv11";

@@ -1,0 +1,26 @@
+{
+  "name": "@yuzai/builtin-adapters",
+  "version": "0.1.0",
+  "description": "Yuzai bot framework builtin adapters",
+  "keywords": [
+    "yuzai",
+    "adapter"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "Alex11",
+  "type": "module",
+  "files": [
+    "OneBotv11.ts",
+    "stdio.ts"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "yuzai": "^0.1.0"
+  }
+}

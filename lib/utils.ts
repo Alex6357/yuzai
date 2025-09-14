@@ -17,8 +17,8 @@ import chokidar, { FSWatcher } from "chokidar";
 // import config from "./config.ts";
 import logger from "./logger.ts";
 
-const promiseExec = promisify(childProcessExec);
-const promiseExecFile = promisify(childProcessExecFile);
+export const execPromise = promisify(childProcessExec);
+export const execFilePromise = promisify(childProcessExecFile);
 
 // -------------------- 等待事件 --------------------
 
@@ -593,9 +593,9 @@ export async function exec(cmd: string | string[], opts: ExecOptions & { quiet?:
   try {
     let result;
     if (Array.isArray(cmd)) {
-      result = await promiseExecFile(cmd[0], cmd.slice(1), opts);
+      result = await execFilePromise(cmd[0], cmd.slice(1), opts);
     } else {
-      result = await promiseExec(cmd, opts);
+      result = await execPromise(cmd, opts);
     }
 
     const stdout: string = String(result.stdout).trim();

@@ -1,0 +1,36 @@
+{
+  "name": "@yuzai/onebot11types-extension",
+  "version": "0.1.0",
+  "description": "Onebotv11 types extension for Yuzai bot framework",
+  "keywords": [
+    "yuzai",
+    "onebot",
+    "qq",
+    "types",
+    "extension"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "Alex11",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "redis": "^5.8.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "yuzai": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
