@@ -2,7 +2,9 @@ import { MessageBuilder } from "yuzai/message";
 import Plugin from "yuzai/plugin";
 import { importExtension } from "yuzai/extensions";
 
-const { default: redis } = await importExtension("redis");
+const { default: leveldb } = (await importExtension(
+  "leveldb",
+)) as typeof import("yuzai/extensions/leveldb");
 
 const helpMessage = `进退群通知插件
 当有人进群或退群时，会发送一条通知消息
@@ -32,9 +34,11 @@ const plugin = new Plugin({
 
       // 保证键值不重复
       let key = `plugins:${plugin.id}:join_notice:group_${event.data.groupID}`;
-      if (await redis.get(key)) return;
-      // 设置过期时间
-      redis.set(key, "1", { expiration: { type: "EX", value: welcomeCD } });
+      // 判断是否在 CD 内
+      const lastSentTime = await leveldb.get(key);
+      if (lastSentTime || Date.now() < lastSentTime + welcomeCD * 1000) return;
+      // 记录时间
+      await leveldb.put(key, Date.now());
 
       await event.bot.sendMessage(
         // TODO 进一步简化消息构建
