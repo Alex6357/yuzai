@@ -25,7 +25,7 @@
     "typescript": "^5.9.2"
   },
   "peerDependencies": {
-    "yuzai": "workspace:../.."
+    "yuzai": "workspace:../../.."
   },
   "publishConfig": {
     "access": "public"

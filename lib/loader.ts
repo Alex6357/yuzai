@@ -361,8 +361,9 @@ export function packageTips() {
     logger.error(`${logger.cyan(i.file)} 缺少依赖 ${logger.red(pack)}`, "Loader");
   }
   packageError.length = 0;
-  logger.error(`安装插件或适配器后请 ${logger.red("pnpm i")} 安装依赖`, "Loader");
-  logger.error(`仍报错${logger.red("进入插件或适配器目录")} pnpm add 依赖`, "Loader");
+  logger.error("此错误不应该出现，可能是 package.json 有误或 node_modules 损坏", "Loader");
+  logger.error("请尝试删除 data/install_status.json 文件，并重新启动", "Loader");
+  logger.error("如果仍报错请找对应插件开发人员反馈", "Loader");
   logger.error("--------------------------------", "Loader");
 }
 

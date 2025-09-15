@@ -15,8 +15,8 @@ importers:
         specifier: ^8.18.3
         version: 8.18.3
       yuzai:
-        specifier: workspace:../..
-        version: link:../..
+        specifier: workspace:../../..
+        version: link:../../..
     devDependencies:
       '@types/express':
         specifier: ^5.0.3

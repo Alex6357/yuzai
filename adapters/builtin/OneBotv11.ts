@@ -24,7 +24,7 @@ import type {
 } from "yuzai/types";
 import type Bot from "yuzai/bot";
 
-const { default: WS } = await importExtension("ws");
+const { default: WS } = (await importExtension("ws")) as typeof import("yuzai/extensions/ws");
 
 export default class OneBotv11Adapter extends Adapter {
   readonly id = "onebotv11";

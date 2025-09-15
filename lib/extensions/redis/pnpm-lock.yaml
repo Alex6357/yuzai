@@ -12,8 +12,8 @@ importers:
         specifier: ^5.8.2
         version: 5.8.2
       yuzai:
-        specifier: workspace:../..
-        version: link:../..
+        specifier: workspace:../../..
+        version: link:../../..
     devDependencies:
       typescript:
         specifier: ^5.9.2

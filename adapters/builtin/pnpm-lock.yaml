@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       yuzai:
-        specifier: workspace:..
-        version: link:..
+        specifier: workspace:../..
+        version: link:../..
     devDependencies:
       '@types/ws':
         specifier: ^8.18.1

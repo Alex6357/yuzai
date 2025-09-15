@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       yuzai:
-        specifier: workspace:../..
-        version: link:../..
+        specifier: workspace:../../..
+        version: link:../../..
     devDependencies:
       typescript:
         specifier: ^5.9.2

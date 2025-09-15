@@ -181,13 +181,14 @@ export async function installDependencies(
   }
 
   try {
-    // 检查 node_modules 是否存在
+    // 检查 node_modules 是否存在或为空
     const nodeModulesPath = path.join(config.rootDir, moduleDir, "node_modules");
     let needInstall = true;
 
     try {
       await fs.access(nodeModulesPath);
-      needInstall = false;
+      // 检查 node_modules 是否为空
+      needInstall = fsSync.readdirSync(nodeModulesPath).length === 0;
     } catch {
       // node_modules 不存在，需要安装依赖
     }
@@ -204,7 +205,7 @@ export async function installDependencies(
       while (retries < maxRetries && !installSuccess) {
         try {
           const { stdout, stderr } = await execPromise(
-            `${packageManagerCommand} --dir ./${(config.rootDir, moduleDir)}`,
+            `${packageManagerCommand} --dir ${path.join(config.rootDir, moduleDir)}`,
             {
               maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
             },
