@@ -1,29 +1,70 @@
-# 雨仔 WebSocket 扩展
+# Yuzai 管理面板扩展
 
-正常来说，Yuzai 不关心 Adapter 的具体实现，因此 Adapter 应该自己维护 WebSocket 服务器。
-但鉴于反向 WebSocket 在各种协议中非常常见，以及出于兼容性考虑，这里以扩展的形式提供一个反向 WebSocket 服务器。
-适配器注册的流程为：
+Yuzai 机器人框架的可视化管理面板扩展，提供基于 Web 的管理界面。
 
-1. `import { importExtension } from "yuzai/extensions"; const { addWsPath } = importExtension("ws");`
-2. 调用 `addWsPath(path, onConnectHandler)`，注册一个 WebSocket 路径和连接处理函数。
-3. WebSocketServer 会在收到 WebSocket 升级请求时调用 `onConnectHandler`，并传递 WebSocket 实例，适配器应保存该实例。
-4. `onConnectHandler` 应返回一个处理函数 `wsHandler`，WS 会在收到消息时调用该函数，并传递消息和 WebSocket 实例。
-5. 适配器可以在 wsHandler 中处理消息，并通过 WebSocket 实例的 `sendMessage()` 方法发送消息。
+## 功能特点
 
-相关方法类型注释如下：
+- 基于 Express.js 和 SvelteKit 构建
+- 提供 HTTP 和 HTTPS 两种访问方式
+- 可视化管理界面，便于监控和配置机器人
+- 显示已安装的扩展列表
 
-```typescript
-type wsHandler = (
-  message: WebSocket.RawData,
-  ws: WebSocket & { sendMessage: (data: object) => void },
-) => void;
-type onConnectHandler = (
-  ws: WebSocket & { sendMessage: (data: object) => void },
-  path: string,
-) => wsHandler;
-type addPath = (path: string, onConnectHandler: onConnectHandler) => void;
+## 安装与配置
+
+该扩展默认已包含在 Yuzai 项目中，且默认启用。
+
+### 配置文件
+
+配置文件位于 `config/pannel.toml`，如果不存在，系统会自动从 `extensions/pannel/config/default.toml` 复制默认配置。
+
+## 启动参数说明
+
+- `host`: 服务器监听地址
+- `port`: HTTP 服务器端口
+- `https.enabled`: 是否启用 HTTPS 服务器
+- `https.host`: HTTPS 服务器监听地址
+- `https.port`: HTTPS 服务器端口
+- `https.key`: HTTPS 私钥路径
+- `https.cert`: HTTPS 证书路径
+
+## 使用方法
+
+1. 启动 Yuzai 机器人框架
+2. 管理面板会自动启动
+3. 在浏览器中访问 `http://localhost:2540` (默认地址)
+4. 如启用 HTTPS，也可通过 `https://localhost:2541` 访问
+
+## 开发
+
+### 前端开发
+
+管理面板前端使用 SvelteKit 构建，相关文件位于 `src/` 目录中。
+
+```bash
+
+# 开发模式
+
+pnpm dev
+
+# 构建生产版本
+
+pnpm build
+
+# 预览生产构建
+
+pnpm preview
 ```
 
-传递给适配器的 WebSocket 实例包含包装日志后的 `sendMessage()` 方法，建议用此发送消息。
+## 目录结构
 
-可以参考 `adapters/OneBotv11.ts` 中的实现。
+```text
+build/ # SvelteKit 构建输出目录
+config/ # 默认配置文件
+src/ # 前端源代码
+lib/ # 共享库文件
+routes/ # 页面路由
+```
+
+## 许可证
+
+本项目采用 GPL-3.0-or-later 许可证。
