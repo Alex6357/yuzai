@@ -24,7 +24,7 @@ import type {
 } from "yuzai/types";
 import type Bot from "yuzai/bot";
 
-const { default: WS } = (await importExtension("ws")) as typeof import("yuzai/extensions/ws");
+const { addWsPath } = (await importExtension("ws")) as typeof import("yuzai/extensions/ws");
 
 export default class OneBotv11Adapter extends Adapter {
   readonly id = "onebotv11";
@@ -57,7 +57,7 @@ export default class OneBotv11Adapter extends Adapter {
   static async init() {
     for (const path of ["OneBotv11", "go-cqhttp"]) {
       // 向 WS 注册路径
-      WS.addPath(
+      addWsPath(
         path,
         // 当 WebSocketServer 接收到对应路径的升级请求时触发回调
         (ws: WebSocket & { sendMessage: (data: object) => void }) => {
@@ -233,7 +233,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `好友消息：${name ? `[${name}] ` : ""}${event.raw_message}`,
           `${event.self_id} <= ${event.user_id}`,
-          true,
         );
         break;
       }
@@ -268,7 +267,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群消息：${user_name ? `[${group_name ? `${group_name}, ` : ""}${user_name}] ` : ""}${event.raw_message}`,
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-          true,
         );
         break;
       }
@@ -283,7 +281,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `频道消息：[${event.sender.nickname}] ${String(event.message)}`,
           `${event.self_id} <= ${event.guild_id}-${event.channel_id}, ${event.user_id}`,
-          true,
         );
         break;
       }
@@ -305,24 +302,18 @@ export default class OneBotv11Adapter extends Adapter {
   async onNotice(event: Onebot11.Onebot11NoticeEvent | Onebot11.GoCqhttpNoticeEvent) {
     switch (event.notice_type) {
       case "friend_recall":
-        logger.info(
-          `好友消息撤回：${event.message_id}`,
-          `${event.self_id} <= ${event.user_id}`,
-          true,
-        );
+        logger.info(`好友消息撤回：${event.message_id}`, `${event.self_id} <= ${event.user_id}`);
         break;
       case "group_recall":
         logger.info(
           `群消息撤回：${event.operator_id} => ${event.user_id} ${event.message_id}`,
           `${event.self_id} <= ${event.group_id}`,
-          true,
         );
         break;
       case "group_increase": {
         logger.info(
           `群成员增加：${event.operator_id} => ${event.user_id} ${event.sub_type}`,
           `${event.self_id} <= ${event.group_id}`,
-          true,
         );
         this.bot?.updateGroupList();
         if (event.user_id === event.self_id)
@@ -334,7 +325,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群成员减少：${event.operator_id} => ${event.user_id} ${event.sub_type}`,
           `${event.self_id} <= ${event.group_id}`,
-          true,
         );
         if (event.user_id === event.self_id) {
           this.bot?.groupList.delete(event.group_id.toString());
@@ -349,7 +339,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群管理员变动：${event.sub_type}`,
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-          true,
         );
         this.bot?.updateGroupMemberInfo(event.group_id.toString(), event.user_id.toString());
         break;
@@ -357,7 +346,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群文件上传：${String(event.file)}`,
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-          true,
         );
         {
           const messageBuilder = new MessageBuilder();
@@ -389,12 +377,11 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群禁言：${event.operator_id} => ${event.user_id} ${event.sub_type} ${event.duration}秒`,
           `${event.self_id} <= ${event.group_id}`,
-          true,
         );
         this.bot?.updateGroupMemberInfo(event.group_id.toString(), event.user_id.toString());
         break;
       case "friend_add":
-        logger.info("好友添加", `${event.self_id} <= ${event.user_id}`, true);
+        logger.info("好友添加", `${event.self_id} <= ${event.user_id}`);
         this.bot?.updateFriendInfo(event.user_id.toString());
         break;
       case "notify":
@@ -404,7 +391,6 @@ export default class OneBotv11Adapter extends Adapter {
               logger.info(
                 `群戳一戳：${event.user_id} => ${event.target_id}`,
                 `${event.self_id} <= ${event.group_id}`,
-                true,
               );
             else
               logger.info(
@@ -416,7 +402,6 @@ export default class OneBotv11Adapter extends Adapter {
             logger.info(
               `群荣誉：${event.honor_type}`,
               `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-              true,
             );
             this.bot?.updateGroupMemberInfo(event.group_id.toString(), event.user_id.toString());
             break;
@@ -424,16 +409,11 @@ export default class OneBotv11Adapter extends Adapter {
             logger.info(
               `群头衔：${event.title}`,
               `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-              true,
             );
             this.bot?.updateGroupMemberInfo(event.group_id.toString(), event.user_id.toString());
             break;
           case "lucky_king":
-            logger.info(
-              `群红包运气王：${event.user_id}`,
-              `${event.self_id} <= ${event.group_id}`,
-              true,
-            );
+            logger.info(`群红包运气王：${event.user_id}`, `${event.self_id} <= ${event.group_id}`);
             break;
           default:
             logger.warn(
@@ -446,16 +426,11 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群名片更新：${event.card_old} => ${event.card_new}`,
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-          true,
         );
         this.bot?.updateGroupMemberInfo(event.group_id.toString(), event.user_id.toString());
         break;
       case "offline_file":
-        logger.info(
-          `离线文件：${String(event.file)}`,
-          `${event.self_id} <= ${event.user_id}`,
-          true,
-        );
+        logger.info(`离线文件：${String(event.file)}`, `${event.self_id} <= ${event.user_id}`);
         {
           const messageBuilder = new MessageBuilder();
           messageBuilder.messageType = "private";
@@ -486,7 +461,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `群精华消息：${event.operator_id} => ${event.sender_id} ${event.sub_type} ${event.message_id}`,
           `${event.self_id} <= ${event.group_id}`,
-          true,
         );
         break;
       // case "guild_channel_recall":
@@ -500,21 +474,18 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `频道消息表情贴：${event.message_id} ${String(event.current_reactions)}`,
           `${event.self_id} <= ${event.guild_id}-${event.channel_id}, ${event.user_id}`,
-          true,
         );
         break;
       case "channel_updated":
         logger.info(
           `子频道更新：${String(event.old_info)} => ${String(event.new_info)}`,
           `${event.self_id} <= ${event.guild_id}-${event.channel_id}, ${event.user_id}`,
-          true,
         );
         break;
       case "channel_created":
         logger.info(
           `子频道创建：${String(event.channel_info)}`,
           `${event.self_id} <= ${event.guild_id}-${event.channel_id}, ${event.user_id}`,
-          true,
         );
         this.bot?.getChannelList(event.guild_id);
         break;
@@ -522,7 +493,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `子频道删除：${String(event.channel_info)}`,
           `${event.self_id} <= ${event.guild_id}-${event.channel_id}, ${event.user_id}`,
-          true,
         );
         this.bot?.getChannelList(event.guild_id);
         break;
@@ -537,7 +507,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `加好友请求：${event.comment}(${event.flag})`,
           `${event.self_id} <= ${event.user_id}`,
-          true,
         );
         this.bot?.onNotice(
           "notice.friend.request",
@@ -549,7 +518,6 @@ export default class OneBotv11Adapter extends Adapter {
         logger.info(
           `加群请求：${event.sub_type} ${event.comment}(${event.flag})`,
           `${event.self_id} <= ${event.group_id}, ${event.user_id}`,
-          true,
         );
         this.bot?.onNotice(
           "notice.group.request",
@@ -830,7 +798,7 @@ export default class OneBotv11Adapter extends Adapter {
   }
 
   async sendPrivateMessage(message: Message, userID: string): Promise<string | undefined> {
-    logger.info(`发送好友消息：${this.makeLog(message)}`, `${this.bot?.id} => ${userID}`, true);
+    logger.info(`发送好友消息：${this.makeLog(message)}`, `${this.bot?.id} => ${userID}`);
     return (
       (
         await this.sendApi("send_private_msg", {
@@ -1014,7 +982,7 @@ export default class OneBotv11Adapter extends Adapter {
   }
 
   async sendGroupMessage(message: Message, groupID: string): Promise<string | undefined> {
-    logger.info(`发送群消息：${this.makeLog(message)}`, `${this.bot?.id} => ${groupID}`, true);
+    logger.info(`发送群消息：${this.makeLog(message)}`, `${this.bot?.id} => ${groupID}`);
     return (
       (
         await this.sendApi("send_group_msg", {
@@ -1175,7 +1143,6 @@ export default class OneBotv11Adapter extends Adapter {
     logger.info(
       `发送频道消息：${this.makeLog(message)}`,
       `${this.bot?.id}] => ${guildID}-${channelID}`,
-      true,
     );
     return (
       await this.sendApi("send_guild_channel_msg", {

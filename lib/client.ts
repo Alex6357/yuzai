@@ -9,8 +9,11 @@ import Adapter from "yuzai/adapter";
 import Plugin from "yuzai/plugin";
 import { loadPlugins, loadAdapters, packageTips } from "yuzai/loader";
 import * as utils from "yuzai/utils";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
 import config from "yuzai/config";
+import { autoImportExtensions } from "yuzai/extensions";
+
+const logger = getLogger();
 
 class Client extends EventEmitter {
   /** 所有 Bot 实例 */
@@ -68,7 +71,7 @@ class Client extends EventEmitter {
     for (const i of ["uncaughtException", "unhandledRejection"]) {
       process.on(i, (e) => {
         try {
-          logger.error(e, i);
+          getLogger(i).error(e);
         } catch (err) {
           console.error(i, e, err);
           client.gracefulExit(process.exitCode);
@@ -78,14 +81,14 @@ class Client extends EventEmitter {
 
     // 退出事件
     process.on("exit", (code) => {
+      const logger = getLogger("Exit");
       logger.mark(
         logger.magenta(
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- 启动时间一定存在
           `雨仔已停止运行，本次运行时长：${utils.getTimeDiff(this._startTime!)} (${code})`,
         ),
-        "exit",
       );
-      logger.trace(this._stack || Error().stack, "exit");
+      logger.trace(this._stack || Error().stack);
     });
 
     // 开始运行
@@ -96,12 +99,13 @@ class Client extends EventEmitter {
     Promise.allSettled([
       (this._plugins = (await loadPlugins()) || new Map()),
       (this._adapters = (await loadAdapters()) || new Map()),
+      await autoImportExtensions(),
       packageTips(),
     ]).then(() => {
       for (const handler of this._onReadyHandlers) {
         handler.onReady();
       }
-      logger.mark("全部加载完成！", "Client");
+      logger.mark("全部加载完成！");
     });
 
     this.keepAlive();
@@ -148,7 +152,7 @@ class Client extends EventEmitter {
       try {
         // 空操作
       } catch (err) {
-        logger.error(err, "keepAliveTimer");
+        getLogger("KeepAliveTimer").error(err);
       }
     }, 0x7fffffff);
   }

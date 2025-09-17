@@ -4,7 +4,7 @@ import { CronExpressionParser } from "cron-parser";
 
 import { ConnectEvent, MessageEvent, NoticeEvent } from "yuzai/event";
 import type { EventIDs, MessageEventIDs, NoticeEventIDs } from "yuzai/event";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
 
 type InteractionKey =
   | `private:${string}`
@@ -482,10 +482,8 @@ class Plugin extends EventEmitter {
       try {
         CronExpressionParser.parse(cron);
       } catch (e) {
-        logger.error(
+        getLogger(this.name).error(
           `插件 ${this.name} 的计划任务 ${name} 的 cron 表达式 "${cron}" 解析失败：${e}，已跳过`,
-          "Plugin",
-          true,
         );
         return this;
       }
@@ -555,7 +553,7 @@ class Plugin extends EventEmitter {
   getInteractKey(event: MessageEvent): InteractionKey | undefined {
     const target = event.message.target;
     if (!target) {
-      logger.error("获取消息 Interact Key 失败，消息目标为空", this.name);
+      getLogger(this.name).error("获取消息 Interact Key 失败，消息目标为空");
       return undefined;
     }
     switch (target.type) {
@@ -586,7 +584,7 @@ class Plugin extends EventEmitter {
           : undefined,
       });
     } else {
-      logger.error("建立交互失败", this.name);
+      getLogger(this.name).error("建立交互失败");
     }
   }
 
@@ -606,7 +604,7 @@ class Plugin extends EventEmitter {
     if (event instanceof MessageEvent) {
       const key = this.getInteractKey(event);
       if (!key) {
-        logger.error("获取消息 Interact Key 失败，消息目标为空", this.name);
+        getLogger(this.name).error("获取消息 Interact Key 失败，消息目标为空");
         return undefined;
       }
       return this.interactions.get(key);

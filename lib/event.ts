@@ -1,5 +1,5 @@
 import Bot from "yuzai/bot";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
 import Message, { MessageBuilder } from "yuzai/message";
 import { PlatformInfo } from "yuzai/types";
 import type { TargetGroup } from "yuzai/types";
@@ -48,8 +48,10 @@ class MessageEvent extends BaseEvent {
    * @param at 是否at用户
    */
   async reply(message: Message | string, quote = false, recallMsg = 0, at = false) {
+    const logger = getLogger(this.bot.nickname);
+
     if (!this.message.senderID) {
-      logger.error("消息用户 ID 为空，无法回复", this.bot.nickname);
+      logger.error("消息用户 ID 为空，无法回复");
       return undefined;
     }
 
@@ -62,8 +64,7 @@ class MessageEvent extends BaseEvent {
     }
 
     if (quote) {
-      if (!this.message.messageID)
-        logger.error("引用回复消息 ID 为空，引用回复功能无法使用", this.bot.nickname);
+      if (!this.message.messageID) logger.error("引用回复消息 ID 为空，引用回复功能无法使用");
       else messageBuilder.addQuoteBlock(this.message.messageID);
     }
     if (at) {
@@ -90,7 +91,7 @@ class MessageEvent extends BaseEvent {
           await this.bot?.adapter?.recallMessage?.(messageID);
         }, recallMsg * 1000);
       } else {
-        logger.warn("适配器不支持撤回消息", this.bot.nickname);
+        logger.warn("适配器不支持撤回消息");
       }
     }
   }

@@ -1,0 +1,39 @@
+{
+  "name": "@yuzai/ws-extension",
+  "version": "0.1.0",
+  "description": "WebSocket extension for Yuzai bot framework",
+  "keywords": [
+    "yuzai",
+    "websocket",
+    "extension"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "Alex11",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "koa": "^3.0.1",
+    "koa-bodyparser": "^4.4.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/koa": "^3.0.0",
+    "@types/koa-bodyparser": "^4.3.12",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "yuzai": "workspace:../.."
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

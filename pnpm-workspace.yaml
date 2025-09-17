@@ -1,0 +1,2 @@
+"patchedDependencies":
+  "log4js@6.9.1": "patch/log4js.patch"

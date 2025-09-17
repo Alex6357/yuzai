@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
-// import path from "node:path";
+import path from "node:path";
 // import util from "node:util";
 import {
   exec as childProcessExec,
@@ -15,7 +15,10 @@ import chokidar, { FSWatcher } from "chokidar";
 // import { ulid } from "ulid";
 
 // import config from "yuzai/config";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
+import config from "yuzai/config";
+
+const logger = getLogger("Utils");
 
 export const execPromise = promisify(childProcessExec);
 export const execFilePromise = promisify(childProcessExecFile);
@@ -139,6 +142,15 @@ export async function mkdir(dir: string, opts?: fsSync.MakeDirectoryOptions) {
     logger.error(["创建", dir, "错误", err]);
     return false;
   }
+}
+
+/**
+ * 获取 data 目录
+ * @param name 标识名
+ * @returns data 目录的绝对路径
+ */
+export function getDataDir(name: string) {
+  return path.resolve(config.rootDir, "data", name);
 }
 
 /**
@@ -581,11 +593,12 @@ export async function mkdir(dir: string, opts?: fsSync.MakeDirectoryOptions) {
 
 export async function exec(cmd: string | string[], opts: ExecOptions & { quiet?: boolean } = {}) {
   // TODO 这个函数需要重写
+  const logger = getLogger("Command");
   const start_time = Date.now();
   const name = logger.cyan(Array.isArray(cmd) ? cmd.join(" ") : cmd);
 
   // 记录命令开始日志
-  logger.log(opts.quiet ? "debug" : "mark", name, "Command");
+  logger.log(opts.quiet ? "debug" : "mark", name);
 
   // 设置默认编码
   opts.encoding ??= "buffer";
@@ -609,7 +622,6 @@ export async function exec(cmd: string | string[], opts: ExecOptions & { quiet?:
     logger.log(
       opts.quiet ? "debug" : "mark",
       `${name} ${logger.green(`[完成${getTimeDiff(start_time)}]`)} ${stdout ? `\n${stdout}` : ""}${stderr ? logger.red(`\n${stderr}`) : ""}`,
-      "Command",
     );
 
     return { error: undefined, stdout, stderr, raw };
@@ -620,7 +632,7 @@ export async function exec(cmd: string | string[], opts: ExecOptions & { quiet?:
     const raw = { stdout: error.stdout || "", stderr: error.stderr || "" };
 
     // 记录错误日志
-    logger.log(opts.quiet ? "debug" : "error", error, "Command");
+    logger.log(opts.quiet ? "debug" : "error", error);
 
     return { error, stdout, stderr, raw };
   }

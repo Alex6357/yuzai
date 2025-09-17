@@ -4,7 +4,7 @@ import type { UUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 
 import Adapter from "yuzai/adapter";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
 import Plugin from "yuzai/plugin";
 import Message, { MessageBuilder } from "yuzai/message";
 import {
@@ -19,6 +19,10 @@ import type { InfoGroup, InfoGuild, InfoUserGroup, InfoUserPersonal, Target } fr
 
 // noinspection JSUnusedGlobalSymbols
 class Bot extends EventEmitter {
+  get logger() {
+    return getLogger(`Bot ${this.id ?? this.UUID}`);
+  }
+
   /** 机器人的唯一标识符 */
   readonly UUID: UUID;
 
@@ -43,7 +47,7 @@ class Bot extends EventEmitter {
       return this._id;
     } else {
       this.updateID();
-      logger.error("Bot ID 未初始化，返回空字符串", `Bot ${this.UUID}`, true);
+      this.logger.error("Bot ID 未初始化，返回空字符串");
       return "";
     }
   }
@@ -77,11 +81,7 @@ class Bot extends EventEmitter {
       return this._nickname;
     } else {
       this.updateNickname();
-      logger.warn(
-        "Bot 昵称未初始化，返回空字符串",
-        `Bot ${this.id !== "" ? this.id : this.UUID}`,
-        true,
-      );
+      this.logger.warn("Bot 昵称未初始化，返回空字符串");
       return "";
     }
   }
@@ -121,11 +121,7 @@ class Bot extends EventEmitter {
       return this._friendList;
     } else {
       this.updateFriendList();
-      logger.warn(
-        "Bot 好友列表未初始化，返回空 Map",
-        `Bot ${this.id !== "" ? this.id : this.UUID}`,
-        true,
-      );
+      this.logger.warn("Bot 好友列表未初始化，返回空 Map");
       return new Map<string, InfoUserPersonal>();
     }
   }
@@ -135,7 +131,7 @@ class Bot extends EventEmitter {
   async updateFriendList() {
     const friendList = await this._adapter?.getFriendList();
     if (!friendList) {
-      logger.error("获取好友列表失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("获取好友列表失败");
       return;
     }
     this._friendList = friendList;
@@ -183,18 +179,14 @@ class Bot extends EventEmitter {
    */
   get groupList(): Map<string, InfoGroup> {
     if (this._adapter?.getGroupList === undefined) {
-      logger.error("Bot 不支持获取群列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群列表");
       return new Map<string, InfoGroup>();
     }
     if (this._groupList) {
       return this._groupList;
     } else {
       this.updateGroupList();
-      logger.warn(
-        "Bot 群列表未初始化，返回空 Map",
-        `Bot ${this.id !== "" ? this.id : this.UUID}`,
-        true,
-      );
+      this.logger.warn("Bot 群列表未初始化，返回空 Map");
       return new Map<string, InfoGroup>();
     }
   }
@@ -203,14 +195,14 @@ class Bot extends EventEmitter {
    */
   async updateGroupList() {
     if (this._adapter?.getGroupList === undefined) {
-      logger.error("Bot 不支持获取群列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群列表");
       return;
     }
 
     const groupList = await this._adapter.getGroupList();
 
     if (!groupList) {
-      logger.error("获取群列表失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("获取群列表失败");
       return;
     }
 
@@ -248,7 +240,7 @@ class Bot extends EventEmitter {
    */
   async getGroupList() {
     if (this._adapter?.getGroupList === undefined) {
-      logger.error("Bot 不支持获取群列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群列表");
       return new Map<string, InfoGroup>();
     }
 
@@ -267,7 +259,7 @@ class Bot extends EventEmitter {
   async updateGroupInfo(groupID: string): Promise<void>;
   async updateGroupInfo(groupID?: string) {
     if (this._adapter?.getGroupInfo === undefined) {
-      logger.error("Bot 不支持获取群信息", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群信息");
       return;
     }
     if (groupID) {
@@ -279,7 +271,7 @@ class Bot extends EventEmitter {
         };
         this.groupList.set(groupID, newGroupInfo);
       } else {
-        logger.error("获取群信息失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+        this.logger.error("获取群信息失败");
         return;
       }
     } else {
@@ -310,7 +302,7 @@ class Bot extends EventEmitter {
   async updateGroupMemberList(groupID: string): Promise<void>;
   async updateGroupMemberList(groupID?: string) {
     if (this._adapter?.getGroupMemberList === undefined) {
-      logger.error("Bot 不支持获取群成员列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群成员列表");
       return;
     }
     if (groupID) {
@@ -331,7 +323,7 @@ class Bot extends EventEmitter {
           });
         }
       } else {
-        logger.error("获取群成员列表失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+        this.logger.error("获取群成员列表失败");
         return;
       }
     } else {
@@ -356,7 +348,7 @@ class Bot extends EventEmitter {
   async getGroupMemberList(groupID: string): Promise<Map<string, InfoUserGroup>>;
   async getGroupMemberList(groupID?: string) {
     if (this._adapter?.getGroupMemberList === undefined) {
-      logger.error("Bot 不支持获取群成员列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取群成员列表");
       return new Map();
     }
     if (groupID) {
@@ -391,7 +383,7 @@ class Bot extends EventEmitter {
   async updateGroupMemberInfo(groupID: string, userID: string): Promise<void>;
   async updateGroupMemberInfo(groupID?: string, userID?: string) {
     if (this._adapter?.getGroupMemberInfo === undefined) {
-      logger.error("Bot 不支持更新群成员信息", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持更新群成员信息");
       return;
     }
     if (groupID && userID) {
@@ -404,7 +396,7 @@ class Bot extends EventEmitter {
       await this.updateGroupList();
       const userIDs = this.groupList.get(groupID)?.members.keys();
       if (!userIDs) {
-        logger.error(`群 ${groupID} 不存在`, `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+        this.logger.error(`群 ${groupID} 不存在`);
         return;
       }
       for (const userID of userIDs) {
@@ -418,7 +410,7 @@ class Bot extends EventEmitter {
       for (const groupID of this.groupList.keys()) {
         const userIDs = this.groupList.get(groupID)?.members.keys();
         if (!userIDs) {
-          logger.error(`群 ${groupID} 不存在`, `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+          this.logger.error(`群 ${groupID} 不存在`);
           continue;
         }
         for (const userID of userIDs) {
@@ -453,18 +445,14 @@ class Bot extends EventEmitter {
    */
   get guildList(): Map<string, InfoGuild> {
     if (this._adapter?.getGuildList === undefined) {
-      logger.error("Bot 不支持获取频道列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取频道列表");
       return new Map();
     }
     if (this._guildList) {
       return this._guildList;
     } else {
       this.updateGuildList();
-      logger.warn(
-        "Bot 频道列表未初始化，返回空 Map",
-        `Bot ${this.id !== "" ? this.id : this.UUID}`,
-        true,
-      );
+      this.logger.warn("Bot 频道列表未初始化，返回空 Map");
       return new Map();
     }
   }
@@ -473,14 +461,14 @@ class Bot extends EventEmitter {
    */
   async updateGuildList() {
     if (this._adapter?.getGuildList === undefined) {
-      logger.error("Bot 不支持获取频道列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取频道列表");
       return;
     }
 
     const guildList = await this._adapter.getGuildList();
 
     if (!guildList) {
-      logger.error("获取频道列表失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("获取频道列表失败");
       return;
     }
 
@@ -518,7 +506,7 @@ class Bot extends EventEmitter {
    */
   async getGuildList() {
     if (this._adapter?.getGuildList === undefined) {
-      logger.error("Bot 不支持获取频道列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取频道列表");
       return new Map<string, InfoGuild>();
     }
 
@@ -537,7 +525,7 @@ class Bot extends EventEmitter {
   async updateGuildInfo(guildID: string): Promise<void>;
   async updateGuildInfo(guildID?: string) {
     if (this._adapter?.getGuildInfo === undefined) {
-      logger.error("Bot 不支持获取频道信息", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取频道信息");
       return;
     }
     if (guildID) {
@@ -549,7 +537,7 @@ class Bot extends EventEmitter {
         };
         this.guildList.set(guildID, newGuildInfo);
       } else {
-        logger.error("获取频道信息失败", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+        this.logger.error("获取频道信息失败");
         return;
       }
     } else {
@@ -577,11 +565,7 @@ class Bot extends EventEmitter {
    */
   async updateGuildMemberInfo(guildID: string, userID: string) {
     if (this._adapter?.getGuildMemberInfo === undefined) {
-      logger.error(
-        "Bot 不支持更新频道成员信息",
-        `Bot ${this.id !== "" ? this.id : this.UUID}`,
-        true,
-      );
+      this.logger.error("Bot 不支持更新频道成员信息");
       return;
     }
     await this.updateGuildList();
@@ -613,7 +597,7 @@ class Bot extends EventEmitter {
   async updateChannelList(guildID: string): Promise<void>;
   async updateChannelList(guildID?: string) {
     if (this._adapter?.getChannelList === undefined) {
-      logger.error("Bot 不支持获取频道列表", `Bot ${this.id !== "" ? this.id : this.UUID}`, true);
+      this.logger.error("Bot 不支持获取频道列表");
       return;
     }
     if (guildID) {

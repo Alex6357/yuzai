@@ -6,19 +6,14 @@ import { type UUID, randomUUID } from "node:crypto";
 import schedule from "node-schedule";
 import lodash from "lodash";
 
-import logger from "./logger.ts";
-import config from "./config.ts";
-import * as utils from "./utils.ts";
-import Plugin from "./plugin.ts";
-import Adapter from "./adapter.ts";
-import {
-  INSTALL_RETRY_CONFIG,
-  waitForInstallation,
-  installDependencies,
-  getInstallStatus,
-  setInstallStatus,
-  loadPersistentInstallStatus,
-} from "./dependency-manager.ts";
+import { getLogger } from "yuzai/logger";
+import config from "yuzai/config";
+import * as utils from "yuzai/utils";
+import Plugin from "yuzai/plugin";
+import Adapter from "yuzai/adapter";
+import { installDependencies } from "yuzai/dependency-manager";
+
+const logger = getLogger("Loader");
 
 /** 插件目录名："plugins" */
 const pluginDirname = "plugins";
@@ -74,71 +69,18 @@ const adapters = new Map<string, typeof Adapter>();
  */
 async function checkAndInstallDependencies(file: string, isAdapter = false) {
   // 只有当是 xxx/xxx.ts 或 xxx/index.ts 时才检查依赖
-  if (!file.includes("/")) {
+  if (!file.includes(path.sep)) {
     return;
   }
 
   // 获取模块目录路径
   const moduleDir = path.join(isAdapter ? adapterDirname : pluginDirname, path.dirname(file));
 
-  // 获取或创建安装状态
-  if (!getInstallStatus(moduleDir)) {
-    setInstallStatus(moduleDir, {
-      installing: false,
-      installed: false,
-      error: false,
-    });
-  }
-
-  const status = getInstallStatus(moduleDir);
-
   try {
-    // 检查是否存在 package.json
-    const packageJsonPath = path.join(config.rootDir, moduleDir, "package.json");
-    await fs.access(packageJsonPath);
-
-    // 检查安装状态，如果没有状态直接进入安装流程
-    if (status) {
-      // 检查是否需要重新安装
-      const shouldReinstall =
-        (status.error && !status.installing) ||
-        (status.installed &&
-          status.lastInstallTime &&
-          Date.now() - status.lastInstallTime > INSTALL_RETRY_CONFIG.reinstallInterval);
-
-      // 如果正在安装，等待安装完成
-      if (status.installing) {
-        await waitForInstallation(moduleDir);
-      }
-
-      // 如果尚未安装或需要重新安装
-      if (!status.installed || shouldReinstall) {
-        await installDependencies(moduleDir, INSTALL_RETRY_CONFIG.maxRetries, "Loader", true);
-      }
-    }
+    await installDependencies(moduleDir);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
   } catch (error: any) {
-    // 如果是 package.json 不存在的错误，跳过安装（不视为错误）
-    if (error.code === "ENOENT" && error.path && error.path.endsWith("package.json")) {
-      return;
-    }
-
-    // 其他错误记录状态
-    if (!getInstallStatus(moduleDir)) {
-      setInstallStatus(moduleDir, {
-        installing: false,
-        installed: false,
-        error: true,
-      });
-    } else {
-      const currentStatus = getInstallStatus(moduleDir);
-      if (currentStatus) {
-        currentStatus.error = true;
-        currentStatus.installing = false;
-      }
-    }
-
-    logger.error(`模块依赖检查失败 ${moduleDir}: ${error.message}`, "Loader");
+    logger.error(`${isAdapter ? "适配器" : "插件"} ${moduleDir} 安装依赖失败: ${error.message}`);
     throw error;
   }
 }
@@ -151,11 +93,8 @@ export async function loadPlugins(reload = false) {
   if (reload) plugins.clear();
   if (plugins.size) return;
 
-  // 加载持久化的安装状态
-  await loadPersistentInstallStatus();
-
-  logger.info("-----------", "Loader");
-  logger.info("加载插件中...", "Loader");
+  logger.info("-----------");
+  logger.info("加载插件中...");
 
   const pluginFiles = await scanPlugins();
 
@@ -165,12 +104,12 @@ export async function loadPlugins(reload = false) {
         (await utils.wait(config.system.pluginLoadTimeout * 1000, loadPlugin(file))) ===
         utils.waitTimeout
       )
-        logger.error(`插件加载超时 ${logger.red(file)}`, "Loader");
+        logger.error(`插件加载超时 ${logger.red(file)}`);
     }),
   );
 
-  logger.info(`加载定时任务[${schedules.size}个]`, "Loader");
-  logger.info(`加载插件[${plugins.size}个]`, "Loader");
+  logger.info(`加载定时任务[${schedules.size}个]`);
+  logger.info(`加载插件[${plugins.size}个]`);
 
   return plugins;
 }
@@ -261,19 +200,10 @@ async function loadPlugin(file: string, reload = false) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
   } catch (error: any) {
     if (error.code === "ENOENT") {
-      logger.error(`插件 ${logger.red(file)} 不存在`, "Loader");
+      logger.error(`插件 ${logger.red(file)} 不存在`);
       return;
     }
     throw error;
-  }
-
-  // 检查并安装依赖（仅对情况2和3）
-  try {
-    await checkAndInstallDependencies(file, false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
-  } catch (error: any) {
-    logger.error(`插件依赖安装失败 ${logger.red(file)}: ${error.message}`, "Loader");
-    return;
   }
 
   /** 记录加载耗时 */
@@ -283,6 +213,15 @@ async function loadPlugin(file: string, reload = false) {
   let plugin: Plugin | Plugin[];
 
   try {
+    // 检查并安装依赖（仅对情况2和3）
+    try {
+      await checkAndInstallDependencies(file, false);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+    } catch (error: any) {
+      logger.error(`插件依赖安装失败 ${logger.red(file)}: ${error.message}`);
+      return;
+    }
+
     const module = await import(pathToFileURL(path.join(getPluginDir(), file)).toString());
     plugin = module.default || module;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
@@ -293,7 +232,7 @@ async function loadPlugin(file: string, reload = false) {
       packageError.push({ error: error, file: path.join(getPluginDir(), file) });
     } else {
       // 其他错误直接记录日志
-      logger.error([`插件加载错误 (${logger.red(file)})`, error], "Loader", true);
+      logger.error([`插件加载错误 (${logger.red(file)})`, error]);
     }
     return;
   }
@@ -309,7 +248,6 @@ async function loadPlugin(file: string, reload = false) {
     if (plugins.has(i.id) && !reload) {
       logger.fatal(
         `插件 ${logger.red(i.name)} 与插件 ${logger.red(plugins.get(i.id)?.name)} 的 ID ${logger.red(i.id)} 重复，已跳过加载新插件`,
-        "Loader",
       );
       return;
     } else {
@@ -324,14 +262,14 @@ async function loadPlugin(file: string, reload = false) {
         ?.on(
           "change",
           lodash.debounce(async () => {
-            logger.mark(`[修改插件][${file}]`, "Loader");
+            logger.mark(`[修改插件][${file}]`);
             await loadPlugin(file, true);
           }, 5000),
         )
         .on(
           "unlink",
           lodash.debounce(async () => {
-            logger.mark(`[卸载插件][${file}]`, "Loader");
+            logger.mark(`[卸载插件][${file}]`);
             // 删除监听
             utils.fileWatcher
               .get(path.join(getPluginDir(), file))
@@ -355,16 +293,16 @@ async function loadPlugin(file: string, reload = false) {
  */
 export function packageTips() {
   if (packageError.length === 0) return;
-  logger.error("--------- 插件或适配器加载错误 ---------", "Loader");
+  logger.error("--------- 插件或适配器加载错误 ---------");
   for (const i of packageError) {
     const pack = i.error.stack.match(/'(.+?)'/g)[0].replace(/'/g, "");
-    logger.error(`${logger.cyan(i.file)} 缺少依赖 ${logger.red(pack)}`, "Loader");
+    logger.error(`${logger.cyan(i.file)} 缺少依赖 ${logger.red(pack)}`);
   }
   packageError.length = 0;
-  logger.error("此错误不应该出现，可能是 package.json 有误或 node_modules 损坏", "Loader");
-  logger.error("请尝试删除 data/install_status.json 文件，并重新启动", "Loader");
-  logger.error("如果仍报错请找对应插件开发人员反馈", "Loader");
-  logger.error("--------------------------------", "Loader");
+  logger.error("此错误不应该出现，可能是 package.json 有误或 node_modules 损坏");
+  logger.error("请尝试删除 data/install_status.json 文件，并重新启动");
+  logger.error("如果仍报错请找对应插件开发人员反馈");
+  logger.error("--------------------------------");
 }
 
 /**
@@ -397,7 +335,7 @@ function createSchedules(plugin: Plugin, reload = false) {
     const uuid = randomUUID();
     // 格式化任务名称用于日志
     const name = `${logger.blue(`[${trigger.name}(${trigger.cron})]`)}`;
-    logger.debug(`加载定时任务 ${name}`, "Loader");
+    logger.debug(`加载定时任务 ${name}`);
 
     schedules.set(uuid, {
       id: uuid,
@@ -410,15 +348,11 @@ function createSchedules(plugin: Plugin, reload = false) {
         async () => {
           try {
             const startTime = Date.now();
-            logger.mark(`${name}${logger.yellow("[开始处理]")}`, undefined, false);
+            getLogger(trigger.name).mark(`${name}${logger.yellow("[开始处理]")}`);
             await trigger.handle(); // 执行任务处理函数
-            logger.mark(
-              `${name}${logger.green(`[完成${utils.getTimeDiff(startTime)}]`)}`,
-              undefined,
-              false,
-            );
+            logger.mark(`${name}${logger.green(`[完成${utils.getTimeDiff(startTime)}]`)}`);
           } catch (err) {
-            logger.error([name, err], undefined, false);
+            getLogger(trigger.name).error([name, err]);
           }
         },
       ),
@@ -445,10 +379,7 @@ export async function loadAdapters(
   if (reload) adapters.clear();
   if (adapters.size) return;
 
-  // 加载持久化的安装状态
-  await loadPersistentInstallStatus();
-
-  logger.info("加载适配器中...", "Loader");
+  logger.info("加载适配器中...");
 
   const files = await scanAdapters();
 
@@ -458,11 +389,11 @@ export async function loadAdapters(
         (await utils.wait(config.system.pluginLoadTimeout * 1000, loadAdapter(file))) ===
         utils.waitTimeout
       )
-        logger.error(`适配器加载超时 ${logger.red(file)}`, "Loader");
+        logger.error(`适配器加载超时 ${logger.red(file)}`);
     }),
   );
 
-  logger.info(`加载适配器[${adapters.size}个]`, "Loader");
+  logger.info(`加载适配器[${adapters.size}个]`);
 
   return adapters;
 }
@@ -488,19 +419,10 @@ async function loadAdapter(file: string, reload = false) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
   } catch (error: any) {
     if (error.code === "ENOENT") {
-      logger.error(`适配器 ${logger.red(file)} 不存在`, "Loader");
+      logger.error(`适配器 ${logger.red(file)} 不存在`);
       return;
     }
     throw error;
-  }
-
-  // 检查并安装依赖（仅对情况2和3）
-  try {
-    await checkAndInstallDependencies(file, true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
-  } catch (error: any) {
-    logger.error(`适配器依赖安装失败 ${logger.red(file)}: ${error.message}`, "Loader");
-    return;
   }
 
   /** 记录加载耗时 */
@@ -510,6 +432,15 @@ async function loadAdapter(file: string, reload = false) {
   let adapter: typeof Adapter;
 
   try {
+    // 检查并安装依赖（仅对情况2和3）
+    try {
+      await checkAndInstallDependencies(file, true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+    } catch (error: any) {
+      logger.error(`适配器依赖安装失败 ${logger.red(file)}: ${error.message}`);
+      return;
+    }
+
     const module = await import(pathToFileURL(path.join(getAdapterDir(), file)).toString());
     adapter = module.default || module;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
@@ -519,7 +450,7 @@ async function loadAdapter(file: string, reload = false) {
       packageError.push({ error: error, file: path.join(getAdapterDir(), file) });
     } else {
       // 其他错误直接记录日志
-      logger.error([`适配器加载错误 (${logger.red(file)})`, error], "Loader", true);
+      logger.error([`适配器加载错误 (${logger.red(file)})`, error]);
     }
     return;
   }
@@ -527,7 +458,6 @@ async function loadAdapter(file: string, reload = false) {
   if (adapters.has(adapter.id) && !reload) {
     logger.fatal(
       `适配器 ${logger.red(adapter.name)} 与适配器 ${logger.red(adapters.get(adapter.id)?.name)} 的 ID ${logger.red(adapter.id)} 重复，已跳过加载新适配器`,
-      "Loader",
     );
     return;
   } else {
@@ -539,7 +469,7 @@ async function loadAdapter(file: string, reload = false) {
     await adapter.init();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
   } catch (error: any) {
-    logger.error([`适配器 ${adapter.name} 初始化错误 (${logger.red(file)})`, error], "Loader");
+    logger.error([`适配器 ${adapter.name} 初始化错误 (${logger.red(file)})`, error]);
     return;
   }
 
@@ -549,14 +479,14 @@ async function loadAdapter(file: string, reload = false) {
     ?.on(
       "change",
       lodash.debounce(async () => {
-        logger.mark(`[修改适配器][${file}]`, "Loader");
+        logger.mark(`[修改适配器][${file}]`);
         await loadAdapter(file, true);
       }, 5000),
     )
     .on(
       "unlink",
       lodash.debounce(async () => {
-        logger.mark(`[卸载适配器][${file}]`, "Loader");
+        logger.mark(`[卸载适配器][${file}]`);
         // 删除监听
         utils.fileWatcher
           .get(path.join(getAdapterDir(), file))

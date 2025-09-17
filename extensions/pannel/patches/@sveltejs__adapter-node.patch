@@ -1,0 +1,13 @@
+diff --git a/index.js b/index.js
+index deed72068bc3100db6f990b7beaa6ae777f1120e..83b202095a085bed1cce59871becc0c9ca54eb46 100644
+--- a/index.js
++++ b/index.js
+@@ -76,7 +76,7 @@ export default function (opts = {}) {
+ 				input,
+ 				external: [
+ 					// dependencies could have deep exports, so we need a regex
+-					...Object.keys(pkg.dependencies || {}).map((d) => new RegExp(`^${d}(\\/.*)?$`))
++					...Object.keys({...pkg.dependencies, ...pkg.peerDependencies} || {}).map((d) => new RegExp(`^${d}(\\/.*)?$`))
+ 				],
+ 				plugins: [
+ 					nodeResolve({

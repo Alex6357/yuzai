@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - esbuild
+
+patchedDependencies:
+  "@sveltejs/adapter-node": patches/@sveltejs__adapter-node.patch

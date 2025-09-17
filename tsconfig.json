@@ -1,15 +1,6 @@
 {
-  "include": ["**/*.ts", "eslint.config.ts"],
-  "exclude": [
-    "node_modules",
-    ".idea",
-    ".vscode",
-    "config",
-    "data",
-    "logs",
-    "patch",
-    "lib/extensions"
-  ],
+  "include": ["**/*.ts", "eslint.config.ts", "extensions/index.ts"],
+  "exclude": ["node_modules", ".idea", ".vscode", "config", "data", "logs", "patch", "extensions"],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
 

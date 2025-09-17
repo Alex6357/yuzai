@@ -1,10 +1,13 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
 import config from "yuzai/config";
 import { execPromise } from "yuzai/utils";
+
+const logger = getLogger("DependencyManager");
 
 export interface InstallStatus {
   /**
@@ -23,6 +26,22 @@ export interface InstallStatus {
    * 最后一次安装时间
    */
   lastInstallTime?: number;
+  /**
+   * 依赖项的哈希值
+   */
+  dependenciesHash?: string;
+  /**
+   * 是否需要构建
+   */
+  needBuild?: boolean;
+  /**
+   * 构建脚本名称
+   */
+  buildScript?: string;
+  /**
+   * 版本号
+   */
+  version?: string;
 }
 
 /**
@@ -35,7 +54,7 @@ const installStatus = new Map<string, InstallStatus>();
 /**
  * 安装状态持久化文件路径
  */
-const INSTALL_STATUS_FILE = path.join(config.rootDir, "data", "install_status.json");
+const INSTALL_STATUS_FILE = path.resolve(config.rootDir, "data", "install_status.json");
 
 /**
  * 安装重试配置
@@ -43,13 +62,9 @@ const INSTALL_STATUS_FILE = path.join(config.rootDir, "data", "install_status.js
 export const INSTALL_RETRY_CONFIG = {
   maxRetries: 3, // 最大重试次数
   retryDelay: 2000, // 重试间隔（毫秒）
-  reinstallInterval: 300000, // 重新安装间隔（5分钟，毫秒）
 };
 
-/**
- * 检查 pnpm 是否可用
- */
-async function isPnpmAvailable(): Promise<boolean> {
+async function checkPnpmAvailable() {
   try {
     await execPromise("pnpm --version");
     return true;
@@ -59,12 +74,147 @@ async function isPnpmAvailable(): Promise<boolean> {
 }
 
 /**
- * 获取要使用的包管理器命令
+ * 检查 pnpm 是否可用
  */
-async function getPackageManagerCommand(): Promise<string> {
-  return (await isPnpmAvailable())
-    ? "pnpm --force install --prod"
-    : "npm --force install --omit=dev";
+const isPnpmAvailable = await checkPnpmAvailable();
+
+/**
+ * 获取要使用的包管理器命令
+ * @param needBuild 是否需要构建（如果需要构建，则不能使用--prod参数）
+ */
+async function getPackageManagerCommand(needBuild = false): Promise<string> {
+  const isPnpm = isPnpmAvailable;
+
+  if (isPnpm) {
+    return needBuild ? "pnpm --force install" : "pnpm --force install --prod";
+  } else {
+    return needBuild ? "npm --force install" : "npm --force install --omit=dev";
+  }
+}
+
+/**
+ * 获取模块的构建和依赖信息
+ */
+async function getModuleInfo(moduleDir: string): Promise<{
+  needBuild: boolean;
+  buildScript: string;
+  version: string;
+  dependenciesHash: string;
+}> {
+  const packageJsonPath = path.join(config.rootDir, moduleDir, "package.json");
+
+  try {
+    const packageJsonContent = await fs.readFile(packageJsonPath, "utf8");
+    const packageJson = JSON.parse(packageJsonContent);
+
+    // 检查是否需要构建
+    const needBuild = !!(packageJson.yuzai && packageJson.yuzai.needBuild);
+    const buildScript = (packageJson.yuzai && packageJson.yuzai.buildScript) || "build";
+    const version = packageJson.version || "0.0.0";
+
+    // 提取依赖信息
+    const dependencies = packageJson.dependencies || {};
+    const devDependencies = packageJson.devDependencies || {};
+
+    // 创建依赖字符串并计算哈希
+    const depsString = JSON.stringify({
+      dependencies,
+      devDependencies: needBuild ? devDependencies : {}, // 如果需要构建，包含 devDependencies
+    });
+
+    const dependenciesHash = crypto.createHash("md5").update(depsString).digest("hex");
+
+    return {
+      needBuild,
+      buildScript,
+      version,
+      dependenciesHash,
+    };
+  } catch (error) {
+    logger.warn(`获取模块信息失败: ${error}`);
+    return {
+      needBuild: false,
+      buildScript: "build",
+      version: "0.0.0",
+      dependenciesHash: "",
+    };
+  }
+}
+
+/**
+ * 检查模块是否需要重新安装或构建
+ */
+async function checkModuleStatus(moduleDir: string): Promise<{
+  needInstall: boolean;
+  needBuild: boolean;
+  moduleInfo: {
+    needBuild: boolean;
+    buildScript: string;
+    version: string;
+    dependenciesHash: string;
+  };
+}> {
+  const status = getInstallStatus(moduleDir);
+  const moduleInfo = await getModuleInfo(moduleDir);
+
+  // 如果没有状态或没有安装过，需要安装
+  if (!status || !status.installed) {
+    return {
+      needInstall: true,
+      needBuild: false,
+      moduleInfo,
+    };
+  }
+
+  // 如果之前安装出错，需要重新安装
+  if (status.error) {
+    return {
+      needInstall: true,
+      needBuild: false,
+      moduleInfo,
+    };
+  }
+
+  // 检查依赖哈希是否变化
+  if (moduleInfo.dependenciesHash && status.dependenciesHash !== moduleInfo.dependenciesHash) {
+    return {
+      needInstall: true,
+      needBuild: false,
+      moduleInfo,
+    };
+  }
+
+  // 检查 node_modules 是否存在
+  const nodeModulesPath = path.join(config.rootDir, moduleDir, "node_modules");
+  try {
+    await fs.access(nodeModulesPath);
+    // 检查 node_modules 是否为空
+    const needReinstall = fsSync.readdirSync(nodeModulesPath).length === 0;
+
+    if (needReinstall) {
+      return {
+        needInstall: true,
+        needBuild: false,
+        moduleInfo,
+      };
+    }
+  } catch {
+    // node_modules 不存在，需要安装
+    return {
+      needInstall: true,
+      needBuild: false,
+      moduleInfo,
+    };
+  }
+
+  // 检查是否需要重新构建（版本变化且需要构建）
+  const needRebuild = moduleInfo.needBuild && status.version !== moduleInfo.version;
+
+  return {
+    needInstall: false,
+    needBuild: needRebuild,
+    moduleInfo,
+  };
 }
 
 /**
@@ -87,7 +237,7 @@ async function saveInstallStatus() {
     // 写入文件
     await fs.writeFile(INSTALL_STATUS_FILE, JSON.stringify(statusObj, null, 2), "utf8");
   } catch (error) {
-    logger.warn(`保存安装状态失败: ${error}`, "DependencyManager");
+    logger.warn(`保存安装状态失败: ${error}`);
   }
 }
 
@@ -111,8 +261,26 @@ async function loadInstallStatus() {
       installStatus.set(key, value as InstallStatus);
     }
   } catch (error) {
-    logger.warn(`加载安装状态失败: ${error}`, "DependencyManager");
+    logger.warn(`加载安装状态失败: ${error}`);
   }
+}
+
+/**
+ * 获取模块安装状态
+ * @param moduleDir 模块目录
+ */
+export function getInstallStatus(moduleDir: string) {
+  return installStatus.get(moduleDir);
+}
+
+/**
+ * 设置模块安装状态
+ * @param moduleDir 模块目录
+ * @param status 状态对象
+ */
+export function setInstallStatus(moduleDir: string, status: InstallStatus) {
+  installStatus.set(moduleDir, { ...installStatus.get(moduleDir), ...status });
+  saveInstallStatus();
 }
 
 /**
@@ -142,153 +310,191 @@ export async function waitForInstallation(moduleDir: string): Promise<void> {
   }
 }
 
-/**
- * 安装依赖
- * @param moduleDir 模块目录
- * @param maxRetries 最大重试次数
- * @param logContext 日志上下文
- * @param shouldSaveStatus 是否应该保存状态到文件
- */
-export async function installDependencies(
+async function runInstall(
   moduleDir: string,
-  maxRetries: number,
-  logContext: string,
-  shouldSaveStatus = false,
+  moduleInfo: {
+    needBuild: boolean;
+    buildScript: string;
+    version: string;
+    dependenciesHash: string;
+  },
 ): Promise<void> {
-  const status = installStatus.get(moduleDir);
-
-  // 如果没有状态，创建一个新的
-  if (!status) {
-    installStatus.set(moduleDir, {
-      installing: true,
-      installed: false,
-      error: false,
-    });
-  } else {
-    // 标记为正在安装
-    status.installing = true;
-    status.error = false;
-  }
-
-  // 保存状态到文件
-  if (shouldSaveStatus) {
-    await saveInstallStatus();
-  }
-
-  const currentStatus = installStatus.get(moduleDir);
-  if (!currentStatus) {
-    throw new Error(`无法获取模块 ${moduleDir} 的状态`);
-  }
-
   try {
-    // 检查 node_modules 是否存在或为空
-    const nodeModulesPath = path.join(config.rootDir, moduleDir, "node_modules");
-    let needInstall = true;
+    const packageManagerCommand = await getPackageManagerCommand(moduleInfo.needBuild);
+    logger.mark(`正在为模块 ${path.basename(moduleDir)} 安装依赖...`);
 
-    try {
-      await fs.access(nodeModulesPath);
-      // 检查 node_modules 是否为空
-      needInstall = fsSync.readdirSync(nodeModulesPath).length === 0;
-    } catch {
-      // node_modules 不存在，需要安装依赖
+    const status = getInstallStatus(moduleDir);
+    if (!status) {
+      setInstallStatus(moduleDir, {
+        installing: true,
+        installed: false,
+        error: false,
+      });
     }
 
-    // 如果需要安装依赖或强制重新安装
-    if (needInstall || currentStatus.error) {
-      const packageManagerCommand = await getPackageManagerCommand();
-      logger.mark(`正在为模块 ${path.basename(moduleDir)} 安装依赖...`, logContext);
+    // 尝试安装依赖（带重试机制）
+    let retries = 0;
+    let installSuccess = false;
 
-      // 尝试安装依赖（带重试机制）
-      let retries = 0;
-      let installSuccess = false;
+    while (retries < INSTALL_RETRY_CONFIG.maxRetries && !installSuccess) {
+      try {
+        const { stdout, stderr } = await execPromise(
+          `${packageManagerCommand} --dir ${path.join(config.rootDir, moduleDir)}`,
+          {
+            maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
+          },
+        );
 
-      while (retries < maxRetries && !installSuccess) {
-        try {
-          const { stdout, stderr } = await execPromise(
-            `${packageManagerCommand} --dir ${path.join(config.rootDir, moduleDir)}`,
-            {
-              maxBuffer: 1024 * 1024, // 增加输出缓冲区大小
-            },
-          );
+        if (stdout) logger.debug(stdout);
+        if (stderr) logger.warn(stderr);
 
-          if (stdout) logger.debug(stdout, logContext);
-          if (stderr) logger.warn(stderr, logContext);
+        installSuccess = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+      } catch (installError: any) {
+        retries++;
+        logger.warn(
+          `模块 ${moduleDir} 依赖安装失败 (尝试 ${retries}/${INSTALL_RETRY_CONFIG.maxRetries}): ${installError.message}`,
+        );
 
-          installSuccess = true;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
-        } catch (installError: any) {
-          retries++;
-          logger.warn(
-            `模块 ${path.basename(moduleDir)} 依赖安装失败 (尝试 ${retries}/${maxRetries}): ${installError.message}`,
-            logContext,
-          );
-
-          // 如果不是最后一次重试，等待一段时间再重试
-          if (retries < maxRetries) {
-            await new Promise((resolve) => setTimeout(resolve, INSTALL_RETRY_CONFIG.retryDelay));
-          }
+        // 如果不是最后一次重试，等待一段时间再重试
+        if (retries < INSTALL_RETRY_CONFIG.maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, INSTALL_RETRY_CONFIG.retryDelay));
         }
       }
-
-      // 如果所有重试都失败了
-      if (!installSuccess) {
-        throw new Error(
-          `模块 ${path.basename(moduleDir)} 依赖安装失败，已达到最大重试次数 ${maxRetries}`,
-        );
-      }
-
-      logger.mark(`模块 ${path.basename(moduleDir)} 依赖安装完成`, logContext);
     }
 
-    // 更新状态
-    currentStatus.installed = true;
-    currentStatus.installing = false;
-    currentStatus.error = false;
-    currentStatus.lastInstallTime = Date.now();
-
-    // 保存状态到文件
-    if (shouldSaveStatus) {
-      await saveInstallStatus();
+    // 如果所有重试都失败了
+    if (!installSuccess) {
+      throw new Error(
+        `模块 ${moduleDir} 依赖安装失败，已达到最大重试次数 ${INSTALL_RETRY_CONFIG.maxRetries}`,
+      );
     }
+
+    logger.mark(`模块 ${moduleDir} 依赖安装完成`);
+
+    setInstallStatus(moduleDir, {
+      installed: true,
+      installing: false,
+      error: false,
+      lastInstallTime: Date.now(),
+      dependenciesHash: moduleInfo.dependenciesHash,
+    });
   } catch (error) {
-    // 更新错误状态
-    currentStatus.installing = false;
-    currentStatus.error = true;
-    currentStatus.lastInstallTime = Date.now();
+    setInstallStatus(moduleDir, {
+      installed: false,
+      installing: false,
+      error: true,
+      lastInstallTime: undefined,
+      dependenciesHash: undefined,
+    });
 
-    // 保存状态到文件
-    if (shouldSaveStatus) {
-      await saveInstallStatus();
-    }
-
-    logger.error(`模块 ${path.basename(moduleDir)} 依赖安装过程中出现错误: ${error}`, logContext);
+    logger.error(`模块 ${moduleDir} 依赖安装过程中出现错误: ${error}`);
     throw error;
   }
 }
 
 /**
- * 获取模块安装状态
- * @param moduleDir 模块目录
+ * 执行构建脚本
  */
-export function getInstallStatus(moduleDir: string) {
-  return installStatus.get(moduleDir);
-}
-
-/**
- * 设置模块安装状态
- * @param moduleDir 模块目录
- * @param status 状态对象
- */
-export function setInstallStatus(
+async function runBuild(
   moduleDir: string,
-  status: { installing: boolean; installed: boolean; error: boolean; lastInstallTime?: number },
-) {
-  installStatus.set(moduleDir, status);
+  moduleInfo: {
+    needBuild: boolean;
+    buildScript: string;
+    version: string;
+    dependenciesHash: string;
+  },
+): Promise<void> {
+  try {
+    logger.mark(`正在为模块 ${moduleDir} 执行构建脚本: ${moduleInfo.buildScript}...`);
+
+    setInstallStatus(moduleDir, {
+      installing: true,
+      installed: false,
+      error: false,
+      needBuild: true,
+      buildScript: moduleInfo.buildScript,
+    });
+
+    const { stdout, stderr } = await execPromise(
+      `${isPnpmAvailable ? "pnpm" : "npm"} --dir ${path.join(config.rootDir, moduleDir)} run ${moduleInfo.buildScript}`,
+      {
+        maxBuffer: 1024 * 1024 * 10, // 增加输出缓冲区大小，构建可能输出较多
+      },
+    );
+
+    if (stdout) logger.debug(stdout);
+    if (stderr) logger.warn(stderr);
+
+    setInstallStatus(moduleDir, {
+      installing: false,
+      installed: true,
+      error: false,
+      version: moduleInfo.version,
+    });
+
+    logger.mark(`模块 ${moduleDir} 构建完成`);
+  } catch (error) {
+    setInstallStatus(moduleDir, {
+      installing: false,
+      installed: false,
+      error: true,
+      version: undefined,
+    });
+    logger.error(`模块 ${moduleDir} 构建失败: ${error}`);
+    throw error;
+  }
 }
 
 /**
- * 加载持久化的安装状态
+ * 安装依赖
+ * @param moduleDir 模块目录
+ * @param maxRetries 最大重试次数
+ * @param shouldSaveStatus 是否应该保存状态到文件
  */
-export async function loadPersistentInstallStatus(): Promise<void> {
-  await loadInstallStatus();
+export async function installDependencies(
+  moduleDir: string,
+  forceReinstall = false,
+): Promise<void> {
+  // 检查模块状态
+  const { needInstall, needBuild, moduleInfo } = await checkModuleStatus(moduleDir);
+
+  if (forceReinstall) {
+    try {
+      await runInstall(moduleDir, moduleInfo);
+      if (moduleInfo.needBuild) await runBuild(moduleDir, moduleInfo);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+    } catch (error: any) {
+      // 直接把 runInstall 和 runBuild 的错误抛给上层
+      throw error;
+    }
+  }
+
+  // 如果不需要重新安装和重新构建，直接返回
+  if (!needInstall && !needBuild) {
+    logger.debug(`模块 ${moduleDir} 无需安装或构建`);
+    return;
+  }
+
+  // 如果需要重新构建但不需要重新安装
+  if (!needInstall && needBuild && !forceReinstall) {
+    logger.debug(`模块 ${moduleDir} 版本变化，需要重新构建`);
+    try {
+      await runBuild(moduleDir, moduleInfo);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+    } catch (error: any) {
+      throw error;
+    }
+    return;
+  }
+
+  try {
+    await runInstall(moduleDir, moduleInfo);
+    if (moduleInfo.needBuild) await runBuild(moduleDir, moduleInfo);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 错误是任意类型
+  } catch (error: any) {
+    throw error;
+  }
 }
+
+await loadInstallStatus();

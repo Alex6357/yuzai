@@ -1,21 +1,38 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- message 只要能转换成字符串 */
 import fs from "node:fs";
 import util from "node:util";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+import toml from "toml";
 import log4js from "log4js";
-import chalk from "chalk";
+import chalk, { type ChalkInstance } from "chalk";
 
-import config from "yuzai/config";
+// 手动加载配置文件
+// config 中使用了 logger，如果从 config 中加载，由于循环引用的初始化顺序会导致错误
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+if (!fs.existsSync(path.resolve(currentDir, "..", "logs")))
+  fs.mkdirSync(path.resolve(currentDir, "..", "logs"));
 
-if (!fs.existsSync("logs")) fs.mkdirSync("logs");
+function loadSystemConfig() {
+  const configPath = path.resolve(currentDir, "..", "config", "system.toml");
+  const defaultConfigPath = path.resolve(currentDir, "..", "config", "defaults", "system.toml");
+
+  if (fs.existsSync(configPath)) {
+    return toml.parse(fs.readFileSync(configPath, "utf-8"));
+  } else if (fs.existsSync(defaultConfigPath)) {
+    return toml.parse(fs.readFileSync(defaultConfigPath, "utf-8"));
+  } else {
+    throw new Error("无法找到 system.toml 配置文件，请检查项目完整性");
+  }
+}
+
+const config = {
+  system: loadSystemConfig(),
+};
 
 // 设置日志样式
 log4js.configure({
-  /**
-   * appenders 定义日志的输出方式，也就是输出到哪里
-   * console：控制台输出
-   * file：输出到 logs 文件夹
-   * error：输出到 logs/error.log 文件
-   */
   appenders: {
     console: {
       type: "console",
@@ -25,8 +42,8 @@ log4js.configure({
       },
     },
     file: {
-      type: "dateFile", // 可以是console,dateFile,file,Logstash等
-      filename: "logs/log", // 将会按照filename和pattern拼接文件名
+      type: "dateFile",
+      filename: "logs/log",
       pattern: "yyyy-MM-dd.log",
       numBackups: 15,
       alwaysIncludePattern: true,
@@ -51,12 +68,6 @@ log4js.configure({
       },
     },
   },
-  /**
-   * categories 定义了日志的分类，指定了日志的输出方式和日志的等级
-   * default：默认日志，输出到 console，最小级别从配置文件读取
-   * file：命令日志，输出到 console 和 file，最小级别是 warn
-   * error：错误日志，输出到 console、file 和 error，最小级别是 error
-   */
   categories: {
     default: { appenders: ["console"], level: config.system.log.level },
     file: { appenders: ["console", "file"], level: "warn" },
@@ -64,237 +75,208 @@ log4js.configure({
   },
 });
 
-class Logger {
-  // consoleLogger 输出到 console
-  // fileLogger 输出到 file 和 console
-  // errorLogger 输出到 error，file 和 console
-  private consoleLogger;
-  private fileLogger;
-  private errorLogger;
+// 创建 log4js logger 实例
+const consoleLogger = log4js.getLogger("default");
+const fileLogger = log4js.getLogger("file");
+const errorLogger = log4js.getLogger("error");
 
-  // chalk
-  rgb = chalk.rgb;
-  hex = chalk.hex;
-  ansi256 = chalk.ansi256;
-  bgRgb = chalk.bgRgb;
-  bgHex = chalk.bgHex;
-  bgAnsi256 = chalk.bgAnsi256;
-  readonly reset = chalk.reset;
-  readonly bold = chalk.bold;
-  readonly dim = chalk.dim;
-  readonly italic = chalk.italic;
-  readonly underline = chalk.underline;
-  readonly overline = chalk.overline;
-  readonly inverse = chalk.inverse;
-  readonly hidden = chalk.hidden;
-  readonly strikethrough = chalk.strikethrough;
-  readonly visible = chalk.visible;
-  readonly black = chalk.black;
-  readonly red = chalk.red;
-  readonly green = chalk.green;
-  readonly yellow = chalk.yellow;
-  readonly blue = chalk.blue;
-  readonly magenta = chalk.magenta;
-  readonly cyan = chalk.cyan;
-  readonly white = chalk.white;
-  readonly gray = chalk.gray;
-  readonly grey = chalk.grey;
-  readonly blackBright = chalk.blackBright;
-  readonly redBright = chalk.redBright;
-  readonly greenBright = chalk.greenBright;
-  readonly yellowBright = chalk.yellowBright;
-  readonly blueBright = chalk.blueBright;
-  readonly magentaBright = chalk.magentaBright;
-  readonly cyanBright = chalk.cyanBright;
-  readonly whiteBright = chalk.whiteBright;
-  readonly bgBlack = chalk.bgBlack;
-  readonly bgRed = chalk.bgRed;
-  readonly bgGreen = chalk.bgGreen;
-  readonly bgYellow = chalk.bgYellow;
-  readonly bgBlue = chalk.bgBlue;
-  readonly bgMagenta = chalk.bgMagenta;
-  readonly bgCyan = chalk.bgCyan;
-  readonly bgWhite = chalk.bgWhite;
-  readonly bgGray = chalk.bgGray;
-  readonly bgGrey = chalk.bgGrey;
-  readonly bgBlackBright = chalk.bgBlackBright;
-  readonly bgRedBright = chalk.bgRedBright;
-  readonly bgGreenBright = chalk.bgGreenBright;
-  readonly bgYellowBright = chalk.bgYellowBright;
-  readonly bgBlueBright = chalk.bgBlueBright;
-  readonly bgMagentaBright = chalk.bgMagentaBright;
-  readonly bgCyanBright = chalk.bgCyanBright;
-  readonly bgWhiteBright = chalk.bgWhiteBright;
-
-  constructor() {
-    this.consoleLogger = log4js.getLogger("default");
-    this.fileLogger = log4js.getLogger("file");
-    this.errorLogger = log4js.getLogger("error");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  private makeLog(message: any, logger?: string, force?: boolean) {
-    const messages = [];
-    messages.push(this.blue(`[${force ? logger : this.makeLoggerName(logger)}]`));
-    for (const i of Array.isArray(message) ? message : [message])
-      messages.push(this.objectToString(i));
-    return messages.join(" ");
-  }
-
-  private makeLoggerName(logger?: string) {
-    // 几种情况：
-    // 没有指定 logger 但设置了 config.system.log.align，返回 config.system.log.align
-    // 没有指定 logger 且没有设置 config.system.log.align，返回 Yuzai
-    // 指定 logger，但没有设置 config.system.log.align，直接返回 logger
-    // 指定 logger 且设置了 config.system.log.align：
-    // 如果 logger 长度小于 config.system.log.align，在两边加上空格，使长度等于 config.system.log.align
-    // 如果 logger 长度大于 config.system.log.align，截断 logger 并在右边加上 .，使长度等于 config.system.log.align
-    if (!logger) return config.system.log.align || "Yuzai";
-    if (!config.system.log.align) return logger;
-    const length = (config.system.log.align.length - logger.length) / 2;
-    if (length > 0)
-      logger = `${" ".repeat(Math.floor(length))}${logger}${" ".repeat(Math.ceil(length))}`;
-    else if (length < 0) logger = logger.slice(0, config.system.log.align.length - 1) + ".";
-    return logger;
-  }
-
-  /**
-   * 将对象转化成字符串
-   * @param data 要转化成字符串的对象
-   * @param utilInspectOpts 传递给 util.inspect 的选项，如果为 false 则不使用 util.inspect
-   * @returns 转化后的字符串
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  private objectToString(data: any, utilInspectOpts = config.system.log.object) {
-    if (typeof data === "string") {
-      // 如果 data 是字符串，不做任何预处理
-    } else if (!utilInspectOpts) {
-      // 如果 data 不是字符串且 opts 为 false，直接调用 toString 方法
-      if (typeof data === "object" && typeof data.toString !== "function") {
-        data = "[object null]";
-      } else {
-        data = String(data);
-      }
+// 工具函数 - 对象转字符串
+function objectToString(data: any, utilInspectOpts = config.system.log.object): string {
+  if (typeof data === "string") {
+    // 不做任何预处理
+  } else if (!utilInspectOpts) {
+    if (typeof data === "object" && typeof data.toString !== "function") {
+      data = "[object null]";
     } else {
-      // 否则，调用 util.inspect 方法，并传入选项
-      if (typeof utilInspectOpts === "boolean") utilInspectOpts = {};
-      data = util.inspect(data, {
-        depth: 10,
-        colors: true,
-        showHidden: true,
-        showProxy: true,
-        getters: true,
-        breakLength: 100,
-        maxArrayLength: 100,
-        maxStringLength: 1000,
-        ...utilInspectOpts,
-      });
+      data = String(data);
     }
-
-    // 处理过长的日志
-    const length = config.system.log.length;
-    if (data.length > length)
-      data = `${data.slice(0, length)}${this.gray(`... ${data.length - length} more characters`)}`;
-    return data;
+  } else {
+    if (typeof utilInspectOpts === "boolean") utilInspectOpts = {};
+    data = util.inspect(data, {
+      depth: 10,
+      colors: true,
+      showHidden: true,
+      showProxy: true,
+      getters: true,
+      breakLength: 100,
+      maxArrayLength: 100,
+      maxStringLength: 1000,
+      ...utilInspectOpts,
+    });
   }
 
-  // 这样写就可以用一个统一的 logger 来记录日志，并把不同级别的日志输出到不同的地方
-  /**
-   * trace 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  trace(message: any, logger?: string, forceName?: boolean) {
-    this.consoleLogger.trace(this.makeLog(message, logger, forceName));
+  const length = config.system.log.length;
+  if (data.length > length) {
+    data = `${data.slice(0, length)}${chalk.gray(`... ${data.length - length} more characters`)}`;
   }
-
-  /**
-   * debug 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  debug(message: any, logger?: string, forceName?: boolean) {
-    this.consoleLogger.debug(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * info 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  info(message: any, logger?: string, forceName?: boolean) {
-    this.consoleLogger.info(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * warn 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  warn(message: any, logger?: string, forceName?: boolean) {
-    this.fileLogger.warn(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * error 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  error(message: any, logger?: string, forceName?: boolean) {
-    this.errorLogger.error(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * fatal 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  fatal(message: any, logger?: string, forceName?: boolean) {
-    this.errorLogger.fatal(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * mark 日志
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-  mark(message: any, logger?: string, forceName?: boolean) {
-    this.fileLogger.mark(this.makeLog(message, logger, forceName));
-  }
-
-  /**
-   * 记录日志
-   *
-   * 方便动态调整类型
-   * @param type 日志类型
-   * @param message 日志信息，多条信息使用数组
-   * @param logger logger 名称
-   * @param forceName 是否强制直接使用 logger 名，而不是进行对齐
-   */
-  log(
-    type: "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "mark",
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- message 只要可以转换成字符串
-    message: any,
-    logger?: string,
-    forceName?: boolean,
-  ) {
-    this[type](message, logger, forceName);
-  }
+  return data;
 }
 
-const logger = new Logger();
-export default logger;
+// 工具函数 - 生成日志消息
+function makeLog(message: any, loggerName: string): string {
+  const messages: string[] = [];
+  messages.push(chalk.blue(`[${loggerName}]`));
+
+  for (const item of Array.isArray(message) ? message : [message]) {
+    messages.push(objectToString(item));
+  }
+
+  return messages.join(" ");
+}
+
+// 日志级别函数
+function trace(message: any, loggerName: string): void {
+  consoleLogger.trace(makeLog(message, loggerName));
+}
+
+function debug(message: any, loggerName: string): void {
+  consoleLogger.debug(makeLog(message, loggerName));
+}
+
+function info(message: any, loggerName: string): void {
+  consoleLogger.info(makeLog(message, loggerName));
+}
+
+function warn(message: any, loggerName: string): void {
+  fileLogger.warn(makeLog(message, loggerName));
+}
+
+function error(message: any, loggerName: string): void {
+  errorLogger.error(makeLog(message, loggerName));
+}
+
+function fatal(message: any, loggerName: string): void {
+  errorLogger.fatal(makeLog(message, loggerName));
+}
+
+function mark(message: any, loggerName: string): void {
+  fileLogger.mark(makeLog(message, loggerName));
+}
+
+// 通用日志函数
+function log(
+  type: "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "mark",
+
+  message: any,
+  loggerName: string,
+): void {
+  const logFunction = {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
+    fatal,
+    mark,
+  }[type];
+
+  logFunction(message, loggerName);
+}
+
+// 定义 Logger 接口，扩展 Chalk 的方法
+interface Logger {
+  trace(message: any): void;
+  debug(message: any): void;
+  info(message: any): void;
+  warn(message: any): void;
+  error(message: any): void;
+  fatal(message: any): void;
+  mark(message: any): void;
+  log(type: "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "mark", message: any): void;
+}
+
+// 创建 logger 实例的工厂函数
+function createLogger(loggerName?: string): Logger & ChalkInstance {
+  const name = loggerName || "Yuzai";
+
+  // 创建基础 logger 对象
+  const baseLogger = {
+    trace: (message: any) => trace(message, name),
+    debug: (message: any) => debug(message, name),
+    info: (message: any) => info(message, name),
+    warn: (message: any) => warn(message, name),
+    error: (message: any) => error(message, name),
+    fatal: (message: any) => fatal(message, name),
+    mark: (message: any) => mark(message, name),
+    log: (type: "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "mark", message: any) =>
+      log(type, message, name),
+  };
+
+  // 创建 Proxy 来代理 chalk 方法
+  const loggerProxy = new Proxy(baseLogger, {
+    get(target, prop, receiver) {
+      // 首先检查 baseLogger 是否有该属性
+      if (prop in target) {
+        return Reflect.get(target, prop, receiver);
+      }
+
+      // 如果没有，则从 chalk 中获取
+      const chalkProp = (chalk as any)[prop];
+      if (chalkProp !== undefined) {
+        return typeof chalkProp === "function"
+          ? (...args: any[]) => {
+              const result = chalkProp.apply(chalk, args);
+              return result;
+            }
+          : chalkProp;
+      }
+
+      // 如果 chalk 中也没有，返回 undefined
+      return undefined;
+    },
+  }) as Logger & ChalkInstance;
+
+  return loggerProxy;
+}
+
+// 缓存已创建的 logger 实例
+const loggerCache = new Map<string, ReturnType<typeof createLogger>>();
+
+// 主导出函数 - 获取或创建指定名称的 logger
+export function getLogger(loggerName?: string) {
+  const name = loggerName || "Yuzai";
+
+  if (loggerCache.has(name)) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- 必存在
+    return loggerCache.get(name)!;
+  }
+
+  const logger = createLogger(name);
+  loggerCache.set(name, logger);
+  return logger;
+}
+
+const logger = {
+  trace: (message: any, loggerName = "Yuzai") => trace(message, loggerName),
+  debug: (message: any, loggerName = "Yuzai") => debug(message, loggerName),
+  info: (message: any, loggerName = "Yuzai") => info(message, loggerName),
+  warn: (message: any, loggerName = "Yuzai") => warn(message, loggerName),
+  error: (message: any, loggerName = "Yuzai") => error(message, loggerName),
+  fatal: (message: any, loggerName = "Yuzai") => fatal(message, loggerName),
+  mark: (message: any, loggerName = "Yuzai") => mark(message, loggerName),
+  log: (
+    type: "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "mark",
+    message: any,
+    loggerName = "Yuzai",
+  ) => log(type, message, loggerName),
+};
+
+const loggerProxy = new Proxy(logger, {
+  get(target, prop, receiver) {
+    if (prop in target) {
+      return Reflect.get(target, prop, receiver);
+    }
+    const chalkProp = (chalk as any)[prop];
+    if (chalkProp !== undefined) {
+      return typeof chalkProp === "function"
+        ? (...args: any[]) => {
+            const result = chalkProp.apply(chalk, args);
+            return result;
+          }
+        : chalkProp;
+    }
+    return undefined;
+  },
+}) as typeof logger & ChalkInstance;
+
+export default loggerProxy;

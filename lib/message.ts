@@ -5,7 +5,9 @@ import path from "node:path";
 import os from "node:os";
 
 import { PlatformInfo, type Target } from "yuzai/types";
-import logger from "yuzai/logger";
+import { getLogger } from "yuzai/logger";
+
+const logger = getLogger();
 
 abstract class BaseMessageBlock {
   // TODO 确定 TYPE 范围

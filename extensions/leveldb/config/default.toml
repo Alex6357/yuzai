@@ -1,0 +1,3 @@
+# 数据库路径，在 data 目录下
+# 提示：是文件夹，默认即 data/leveldb 文件夹
+dbPath = "leveldb"

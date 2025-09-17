@@ -1,0 +1,15 @@
+# 服务器地址
+host = "localhost"
+# 服务器端口
+port = 2540
+
+[https]
+# 是否启用 https 服务器
+enabled = false
+# https 服务器地址
+host = "localhost"
+# https 服务器端口
+port = 2541
+# https 服务器证书
+key = "config/localhost.key"
+cert = "config/localhost.crt"
